@@ -360,18 +360,7 @@ public class Splasher {
             }
         }
 
-        // Priority 2: Follow ally paint trail
-        MapInfo[] tiles = rc.senseNearbyMapInfos();
-        for (MapInfo tile : tiles) {
-            if (tile.getPaint().isAlly()) {
-                rc.setIndicatorString("P1: Following ally paint");
-                Metrics.trackRetreatOutcome("paint");
-                Navigation.moveTo(rc, tile.getMapLocation());
-                return;
-            }
-        }
-
-        // Priority 3: Navigate to spawn location
+        // Priority 2: Navigate to spawn location (ALWAYS go home, don't follow random paint)
         if (spawnLocation != null) {
             int distToSpawn = myLoc.distanceSquaredTo(spawnLocation);
             rc.setIndicatorString("P1: Returning to spawn (" + distToSpawn + " away)");
@@ -381,7 +370,7 @@ public class Splasher {
             return;
         }
 
-        // Fallback: Random movement
+        // Fallback: Random movement (should rarely happen)
         rc.setIndicatorString("P1: LOST - no spawn location!");
         Metrics.trackRetreatOutcome("wandering");
         Utils.tryMoveRandom(rc);

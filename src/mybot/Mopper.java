@@ -352,23 +352,12 @@ public class Mopper {
             }
         }
 
-        // Priority 2: Follow ally paint trail
-        MapInfo[] tiles = rc.senseNearbyMapInfos();
-        for (MapInfo tile : tiles) {
-            if (tile.getPaint().isAlly()) {
-                rc.setIndicatorString("P1: Following ally paint");
-                Metrics.trackRetreatOutcome("paint");
-                Navigation.moveTo(rc, tile.getMapLocation());
-                return;
-            }
-        }
-
-        // Priority 3: Navigate to spawn location (remembered tower)
+        // Priority 2: Navigate to spawn location (ALWAYS go home, don't follow random paint)
         if (spawnLocation != null) {
             int distToSpawn = myLoc.distanceSquaredTo(spawnLocation);
             rc.setIndicatorString("P1: Returning to spawn (" + distToSpawn + " away)");
             rc.setIndicatorLine(myLoc, spawnLocation, 255, 255, 0);
-            Metrics.trackRetreatOutcome("wandering");  // Still wandering, but with purpose
+            Metrics.trackRetreatOutcome("wandering");
             Navigation.moveTo(rc, spawnLocation);
             return;
         }
