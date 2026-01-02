@@ -484,34 +484,34 @@ public class Soldier {
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         boolean underAttack = enemies.length >= 2;
 
-        // Decision logic based on postmortems - "Money Is All You Need":
+        // Decision logic - prioritize early defense:
+        // - Defense towers protect paint towers (critical infrastructure)
         // - Money towers produce 4x resources vs paint towers
         // - Income = (20 + 3*SRPs) * #MoneyTowers
-        // - Early: Paint tower critical for survival
-        // - Mid/Late: Money towers dominate economy
 
         // If we can see towers, use visible counts
         int totalVisible = paintTowers + moneyTowers + defenseTowers;
 
         if (totalVisible > 0) {
             // We can see towers - make informed decision
-            // Priority: Defense when under attack
+            // PRIORITY 1: Defense when under attack
             if (underAttack && defenseTowers == 0) {
                 return UnitType.LEVEL_ONE_DEFENSE_TOWER;
             }
 
-            // Target ratio: 2 money : 1 paint : 1 defense
-            // Build defense tower if we have none and have at least 1 money tower
-            if (defenseTowers == 0 && moneyTowers >= 1) {
+            // PRIORITY 2: First defense tower ASAP after first paint tower (before round 200)
+            // Defense protects our paint towers from being destroyed
+            if (defenseTowers == 0 && paintTowers >= 1 && round < 200) {
                 return UnitType.LEVEL_ONE_DEFENSE_TOWER;
             }
 
-            // Money towers are crucial for economy!
+            // After round 200, assume we probably have defense somewhere - focus economy
+            // Money towers are crucial for income!
             if (moneyTowers < paintTowers * 2) {
                 return UnitType.LEVEL_ONE_MONEY_TOWER;
             }
 
-            // Keep defense towers proportional
+            // Keep defense towers proportional (1 per 2 money towers)
             if (defenseTowers < moneyTowers / 2) {
                 return UnitType.LEVEL_ONE_DEFENSE_TOWER;
             }
@@ -524,13 +524,23 @@ public class Soldier {
         }
 
         // No towers visible - use ROUND-BASED cycling for determinism
-        // Early game: Paint tower for survival
-        if (round < 150) {
+        // Very early game (first tower): Paint tower for survival
+        if (round < 75) {
             return UnitType.LEVEL_ONE_PAINT_TOWER;
         }
 
-        // Use robot ID + round to create deterministic but varied selection
-        // Ratio: 2 Money : 1 Paint : 1 Defense (50% / 25% / 25%)
+        // Early game: Get defense up quickly (round 75-150)
+        if (round < 150) {
+            // Alternate: Paint, Defense, Paint, Defense...
+            int selector = (rc.getID() + round / 25) % 2;
+            if (selector == 0) {
+                return UnitType.LEVEL_ONE_DEFENSE_TOWER;
+            }
+            return UnitType.LEVEL_ONE_PAINT_TOWER;
+        }
+
+        // Mid/Late game: Focus on economy with defense support
+        // Ratio: 2 Money : 1 Defense : 1 Paint (50% / 25% / 25%)
         int robotId = rc.getID();
         int selector = (robotId + round / 50) % 4;
 
