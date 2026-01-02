@@ -158,9 +158,10 @@ public class Tower {
             return UnitType.SOLDIER;
         }
 
-        // Sub-D: Early game (rounds 1-200)
-        if (round < 200) {
-            if (soldiersSpawned < 3 || Utils.rng.nextInt(10) < 8) {
+        // Sub-D: Early game (rounds 1-300) - AGGRESSIVE SOLDIER SPAWNING
+        if (round < 300) {
+            // Almost all soldiers early for maximum paint coverage
+            if (soldiersSpawned < 5 || Utils.rng.nextInt(10) < 9) {
                 return UnitType.SOLDIER;
             }
             return UnitType.MOPPER;

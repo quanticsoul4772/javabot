@@ -330,11 +330,21 @@ public class Soldier {
     }
 
     /**
-     * Default behavior: paint and explore.
+     * Default behavior: paint and explore - SIMPLIFIED for speed.
      */
     private static void exploreAndPaint(RobotController rc) throws GameActionException {
         Utils.tryPaintCurrent(rc);
 
+        // Priority 1: Enemy paint (contest territory)
+        MapLocation enemyTarget = findEnemyPaint(rc);
+        if (enemyTarget != null) {
+            Navigation.moveTo(rc, enemyTarget);
+            Utils.tryPaintCurrent(rc);
+            rc.setIndicatorString("P8: Contesting territory");
+            return;
+        }
+
+        // Priority 2: Any unpainted tile
         MapLocation paintTarget = findUnpaintedTile(rc);
         if (paintTarget != null) {
             Navigation.moveTo(rc, paintTarget);
@@ -344,6 +354,28 @@ public class Soldier {
 
         Utils.tryPaintCurrent(rc);
         rc.setIndicatorString("P8: Exploring");
+    }
+
+    /**
+     * Find nearest enemy paint to contest.
+     */
+    private static MapLocation findEnemyPaint(RobotController rc) throws GameActionException {
+        MapInfo[] tiles = rc.senseNearbyMapInfos();
+        MapLocation myLoc = rc.getLocation();
+        MapLocation best = null;
+        int bestDist = Integer.MAX_VALUE;
+
+        for (MapInfo tile : tiles) {
+            if (!tile.isPassable()) continue;
+            if (tile.getPaint().isEnemy()) {
+                int dist = myLoc.distanceSquaredTo(tile.getMapLocation());
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = tile.getMapLocation();
+                }
+            }
+        }
+        return best;
     }
 
     /**
