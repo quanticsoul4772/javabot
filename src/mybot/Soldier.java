@@ -11,6 +11,7 @@ import battlecode.common.*;
 public class Soldier {
 
     private static MapLocation targetRuin = null;
+    private static UnitType targetTowerType = null;  // Tower type being built
 
     // Thresholds (tune these during competition) - AGGRESSIVE
     private static final int HEALTH_CRITICAL = 15;  // Lower = fight longer
@@ -421,6 +422,78 @@ public class Soldier {
     }
 
     /**
+     * Choose which tower type to build based on game state.
+     * Strategy:
+     *   - First tower: Paint Tower (need paint for units)
+     *   - Second tower: Money Tower (economy is critical)
+     *   - After that: Alternate Money/Paint, with Defense if under attack
+     */
+    private static UnitType chooseTowerType(RobotController rc) throws GameActionException {
+        int round = rc.getRoundNum();
+
+        // Count our tower types
+        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+        int paintTowers = 0;
+        int moneyTowers = 0;
+        int defenseTowers = 0;
+
+        for (RobotInfo ally : allies) {
+            UnitType type = ally.getType();
+            if (type == UnitType.LEVEL_ONE_PAINT_TOWER ||
+                type == UnitType.LEVEL_TWO_PAINT_TOWER ||
+                type == UnitType.LEVEL_THREE_PAINT_TOWER) {
+                paintTowers++;
+            } else if (type == UnitType.LEVEL_ONE_MONEY_TOWER ||
+                       type == UnitType.LEVEL_TWO_MONEY_TOWER ||
+                       type == UnitType.LEVEL_THREE_MONEY_TOWER) {
+                moneyTowers++;
+            } else if (type == UnitType.LEVEL_ONE_DEFENSE_TOWER ||
+                       type == UnitType.LEVEL_TWO_DEFENSE_TOWER ||
+                       type == UnitType.LEVEL_THREE_DEFENSE_TOWER) {
+                defenseTowers++;
+            }
+        }
+
+        // Check if under attack (enemies nearby)
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        boolean underAttack = enemies.length >= 2;
+
+        // Decision logic:
+        // 1. First priority: Ensure at least 1 paint tower (we start with some)
+        // 2. Build money towers for economy (very important per postmortems)
+        // 3. If under heavy attack, build defense tower
+        // 4. Otherwise alternate money/paint favoring money
+
+        if (paintTowers == 0) {
+            // No paint towers visible - we need one!
+            return UnitType.LEVEL_ONE_PAINT_TOWER;
+        }
+
+        if (underAttack && defenseTowers == 0) {
+            // Under attack with no defense - build one
+            return UnitType.LEVEL_ONE_DEFENSE_TOWER;
+        }
+
+        // Favor money towers (2:1 ratio with paint after first paint tower)
+        // "Money Is All You Need" postmortem emphasizes money tower value
+        if (moneyTowers < paintTowers * 2) {
+            return UnitType.LEVEL_ONE_MONEY_TOWER;
+        }
+
+        // Late game: more defense towers
+        if (round > 500 && defenseTowers < 2) {
+            return UnitType.LEVEL_ONE_DEFENSE_TOWER;
+        }
+
+        // Default: alternate between money and paint
+        if (moneyTowers <= paintTowers) {
+            return UnitType.LEVEL_ONE_MONEY_TOWER;
+        }
+
+        return UnitType.LEVEL_ONE_PAINT_TOWER;
+    }
+
+    /**
      * Find a ruin without a tower.
      */
     private static MapLocation findBuildableRuin(RobotController rc, MapLocation[] ruins) throws GameActionException {
@@ -450,7 +523,13 @@ public class Soldier {
     private static void handleTowerBuilding(RobotController rc, MapLocation ruin) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
 
-        rc.setIndicatorString("P6: Building tower at " + ruin);
+        // Choose tower type if not already set
+        if (targetTowerType == null) {
+            targetTowerType = chooseTowerType(rc);
+        }
+
+        String towerName = targetTowerType.toString().replace("LEVEL_ONE_", "");
+        rc.setIndicatorString("P6: Building " + towerName + " at " + ruin);
         rc.setIndicatorLine(myLoc, ruin, 0, 255, 0);
 
         // Alert splashers to help clear enemy paint on pattern tiles
@@ -462,8 +541,8 @@ public class Soldier {
             return;
         }
 
-        if (rc.canMarkTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin)) {
-            rc.markTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin);
+        if (rc.canMarkTowerPattern(targetTowerType, ruin)) {
+            rc.markTowerPattern(targetTowerType, ruin);
         }
 
         MapInfo[] patternTiles = rc.senseNearbyMapInfos(ruin, 8);
@@ -480,11 +559,13 @@ public class Soldier {
             }
         }
 
-        if (rc.canCompleteTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin)) {
-            rc.completeTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin);
+        if (rc.canCompleteTowerPattern(targetTowerType, ruin)) {
+            rc.completeTowerPattern(targetTowerType, ruin);
             Metrics.trackTowerBuilt();
-            rc.setTimelineMarker("Tower built!", 0, 255, 0);
+            rc.setTimelineMarker(towerName + " built!", 0, 255, 0);
+            System.out.println("[SOLDIER #" + rc.getID() + "] Built " + towerName + " at " + ruin);
             targetRuin = null;
+            targetTowerType = null;  // Reset for next tower
         }
     }
 
@@ -584,6 +665,7 @@ public class Soldier {
             case BUILDING_TOWER:
                 if (stateTurns > BUILDING_TIMEOUT) {
                     state = SoldierState.IDLE;
+                    targetTowerType = null;  // Reset tower type
                     return;
                 }
                 // Exit if target has a robot (tower built or enemy there)
@@ -592,6 +674,7 @@ public class Soldier {
                     if (robot != null) {
                         state = SoldierState.IDLE;
                         targetRuin = null;
+                        targetTowerType = null;  // Reset tower type
                     }
                 }
                 break;
