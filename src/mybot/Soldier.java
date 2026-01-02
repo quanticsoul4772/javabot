@@ -429,9 +429,6 @@ public class Soldier {
      *   - Second tower: Money Tower (economy is critical)
      *   - After that: Alternate Money/Paint, with Defense if under attack
      */
-    // Global tower counts (approximated via round-based cycling)
-    private static int globalTowersBuilt = 0;
-
     private static UnitType chooseTowerType(RobotController rc) throws GameActionException {
         int round = rc.getRoundNum();
 
@@ -494,19 +491,20 @@ public class Soldier {
             return UnitType.LEVEL_ONE_PAINT_TOWER;
         }
 
-        // No towers visible - use round-based cycling to diversify
-        // This ensures we don't only build paint towers when exploring!
-        globalTowersBuilt++;
-
-        // Early game (first 200 rounds): Build paint tower first for survival
-        if (round < 200 && globalTowersBuilt <= 1) {
+        // No towers visible - use ROUND-BASED cycling for determinism
+        // All soldiers in same round range build same type = coordination
+        // Early game: Paint tower for survival
+        if (round < 150) {
             return UnitType.LEVEL_ONE_PAINT_TOWER;
         }
 
-        // Cycle through tower types: Money, Money, Paint (2:1 ratio)
-        // This matches the "Money Is All You Need" strategy
-        int cycle = globalTowersBuilt % 3;
-        if (cycle == 0 || cycle == 1) {
+        // Use robot ID + round to create deterministic but varied selection
+        // This ensures different soldiers build different types
+        int robotId = rc.getID();
+        int selector = (robotId + round / 50) % 3;
+
+        // 2:1 Money:Paint ratio per "Money Is All You Need" strategy
+        if (selector == 0 || selector == 1) {
             return UnitType.LEVEL_ONE_MONEY_TOWER;  // 2/3 money towers
         }
 
