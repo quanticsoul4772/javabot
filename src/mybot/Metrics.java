@@ -26,8 +26,8 @@ public class Metrics {
     public static int[] towerPriority = new int[8];
 
     // ==================== FSM STATE TRACKING ====================
-    // Soldier states: IDLE=0, BUILDING=1, DEFENDING=2, RETREATING=3
-    public static int[] soldierStateTurns = new int[4];
+    // Soldier states: IDLE=0, BUILDING_TOWER=1, BUILDING_SRP=2, DEFENDING=3, RETREATING=4
+    public static int[] soldierStateTurns = new int[5];
 
     // Splasher states: IDLE=0, MOVING_TO_SPLASH=1, ADVANCING=2
     public static int[] splasherStateTurns = new int[3];
@@ -68,6 +68,10 @@ public class Metrics {
     public static int moneyTowersBuilt = 0;
     public static int defenseTowersBuilt = 0;
 
+    // ==================== SRP (SPECIAL RESOURCE PATTERNS) ====================
+    public static int srpAttempts = 0;
+    public static int srpsBuilt = 0;
+
     // ==================== COMMUNICATION ====================
     public static int messagesSent = 0;
     public static int messagesActedOn = 0;
@@ -99,7 +103,7 @@ public class Metrics {
     }
 
     public static void trackSoldierState(int state) {
-        if (ENABLED && state >= 0 && state < 4) {
+        if (ENABLED && state >= 0 && state < 5) {
             soldierStateTurns[state]++;
         }
     }
@@ -152,6 +156,14 @@ public class Metrics {
 
     public static void trackRuinDenied() {
         if (ENABLED) ruinsDenied++;
+    }
+
+    public static void trackSRPAttempt() {
+        if (ENABLED) srpAttempts++;
+    }
+
+    public static void trackSRPBuilt() {
+        if (ENABLED) srpsBuilt++;
     }
 
     // ==================== NEW TRACKING METHODS ====================

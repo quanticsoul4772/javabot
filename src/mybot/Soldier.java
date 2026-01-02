@@ -20,7 +20,7 @@ public class Soldier {
     private static final int EARLY_GAME_ROUNDS = 100;
 
     // ==================== FSM STATE ====================
-    enum SoldierState { IDLE, BUILDING_TOWER, DEFENDING_TOWER, RETREATING }
+    enum SoldierState { IDLE, BUILDING_TOWER, BUILDING_SRP, DEFENDING_TOWER, RETREATING }
     private static SoldierState state = SoldierState.IDLE;
     private static MapLocation stateTarget = null;
     private static int stateStartRound = 0;
@@ -28,8 +28,12 @@ public class Soldier {
 
     // State timeout values (turns)
     private static final int BUILDING_TIMEOUT = 100;
+    private static final int SRP_TIMEOUT = 60;  // Shorter timeout for SRP building
     private static final int DEFENDING_TIMEOUT = 30;
     private static final int RETREATING_TIMEOUT = 50;
+
+    // SRP (Special Resource Pattern) state
+    private static MapLocation targetSRP = null;
 
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
@@ -143,6 +147,27 @@ public class Soldier {
             enterState(SoldierState.RETREATING, null, round);
             retreatForPaint(rc);
             return;
+        }
+
+        // ===== PRIORITY 3.5: BUILD SRP (economy boost) =====
+        // SRPs boost income: income = (20 + 3*#SRPs) * #MoneyTowers
+        if (round > 200 && rc.getPaint() > 100) {  // Mid-game with good paint
+            // Continue existing SRP build
+            if (state == SoldierState.BUILDING_SRP && targetSRP != null) {
+                handleSRPBuilding(rc, targetSRP);
+                return;
+            }
+
+            // Find new SRP location
+            MapLocation srpLoc = findSRPLocation(rc);
+            if (srpLoc != null) {
+                System.out.println("[SRP] Soldier #" + rc.getID() + " starting SRP at " + srpLoc);
+                Metrics.trackSRPAttempt();
+                targetSRP = srpLoc;
+                enterState(SoldierState.BUILDING_SRP, srpLoc, round);
+                handleSRPBuilding(rc, srpLoc);
+                return;
+            }
         }
 
         // ===== PRIORITY 4: OPPORTUNISTIC KILLS =====
@@ -744,6 +769,17 @@ public class Soldier {
                 }
                 break;
 
+            case BUILDING_SRP:
+                if (stateTurns > SRP_TIMEOUT) {
+                    state = SoldierState.IDLE;
+                    targetSRP = null;
+                    return;
+                }
+                // Note: After marking, canMarkResourcePattern returns false,
+                // so we only exit on timeout or if we've completed successfully
+                // (completion is handled in handleSRPBuilding)
+                break;
+
             case DEFENDING_TOWER:
                 if (stateTurns > DEFENDING_TIMEOUT) {
                     state = SoldierState.IDLE;
@@ -779,6 +815,9 @@ public class Soldier {
         switch (state) {
             case BUILDING_TOWER:
                 continueBuildingTower(rc);
+                break;
+            case BUILDING_SRP:
+                continueBuildingSRP(rc);
                 break;
             case DEFENDING_TOWER:
                 continueDefending(rc);
@@ -837,6 +876,149 @@ public class Soldier {
         } else {
             // Try to fully recover before re-engaging
             retreatForPaint(rc);
+        }
+    }
+
+    // ==================== SRP (Special Resource Pattern) METHODS ====================
+
+    /**
+     * Continue building an SRP at targetSRP.
+     */
+    private static void continueBuildingSRP(RobotController rc) throws GameActionException {
+        if (targetSRP == null) {
+            state = SoldierState.IDLE;
+            return;
+        }
+
+        rc.setIndicatorString("FSM: BUILDING_SRP t=" + stateTurns);
+        rc.setIndicatorLine(rc.getLocation(), targetSRP, 255, 255, 0);  // Yellow
+
+        handleSRPBuilding(rc, targetSRP);
+    }
+
+    /**
+     * Find a suitable location to build an SRP.
+     * Strategy: Check all visible passable tiles - canMarkResourcePattern is the key filter.
+     */
+    private static MapLocation findSRPLocation(RobotController rc) throws GameActionException {
+        MapLocation myLoc = rc.getLocation();
+        MapLocation best = null;
+        int bestScore = Integer.MIN_VALUE;
+
+        // Get all visible tiles and find valid SRP centers
+        MapInfo[] tiles = rc.senseNearbyMapInfos();
+        for (MapInfo tile : tiles) {
+            if (!tile.isPassable()) continue;  // Must be passable
+
+            MapLocation candidate = tile.getMapLocation();
+
+            // Check if we can mark SRP here (API handles all requirements)
+            if (!rc.canMarkResourcePattern(candidate)) continue;
+
+            // Score the location (prefer ally paint, penalize enemy)
+            int score = scoreSRPLocation(rc, candidate);
+            if (score > bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    /**
+     * Score a potential SRP location based on:
+     * - Ally paint coverage (higher = better)
+     * - Enemy paint (penalty)
+     * - Distance from us (closer = better)
+     */
+    private static int scoreSRPLocation(RobotController rc, MapLocation center) throws GameActionException {
+        int score = 0;
+        int allyPaint = 0;
+
+        // Check 5x5 area
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = -2; dy <= 2; dy++) {
+                MapLocation tile = center.translate(dx, dy);
+                if (!rc.canSenseLocation(tile)) return -1000;
+                MapInfo info = rc.senseMapInfo(tile);
+                if (!info.isPassable()) return -1000;  // Wall/ruin blocks SRP
+                if (info.getPaint().isAlly()) allyPaint++;
+                if (info.getPaint().isEnemy()) score -= 5;  // Penalty for enemy paint
+            }
+        }
+
+        score += allyPaint * 2;  // Reward ally paint coverage
+        score -= rc.getLocation().distanceSquaredTo(center) / 4;  // Closer is better
+        return score;
+    }
+
+    /**
+     * Handle SRP pattern building (similar to tower building).
+     */
+    private static void handleSRPBuilding(RobotController rc, MapLocation center) throws GameActionException {
+        MapLocation myLoc = rc.getLocation();
+
+        rc.setIndicatorString("Building SRP at " + center);
+        rc.setIndicatorLine(myLoc, center, 255, 255, 0);  // Yellow line
+
+        // Step 1: Mark the pattern if not marked
+        if (rc.canMarkResourcePattern(center)) {
+            rc.markResourcePattern(center);
+        }
+
+        // Step 2: Check if we can complete
+        if (rc.canCompleteResourcePattern(center)) {
+            rc.completeResourcePattern(center);
+            Metrics.trackSRPBuilt();
+            System.out.println("[SRP BUILT] #" + rc.getID() + " completed at " + center);
+            rc.setTimelineMarker("SRP built!", 255, 255, 0);
+            targetSRP = null;
+            state = SoldierState.IDLE;
+            return;
+        }
+
+        // Step 3: Paint pattern tiles
+        boolean[][] pattern = rc.getResourcePattern();
+        int tilesNeedingPaint = 0;
+        int tilesWithMarks = 0;
+        MapLocation tileToMoveTo = null;
+
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = -2; dy <= 2; dy++) {
+                MapLocation tile = center.translate(dx, dy);
+                if (!rc.canSenseLocation(tile)) continue;
+
+                MapInfo info = rc.senseMapInfo(tile);
+                PaintType mark = info.getMark();
+                PaintType paint = info.getPaint();
+
+                if (mark != PaintType.EMPTY) tilesWithMarks++;
+
+                // Need to paint if mark doesn't match current paint
+                if (mark != PaintType.EMPTY && mark != paint) {
+                    tilesNeedingPaint++;
+
+                    // Skip enemy paint - need splasher help
+                    if (paint.isEnemy()) continue;
+
+                    boolean secondary = (mark == PaintType.ALLY_SECONDARY);
+                    if (rc.canAttack(tile)) {
+                        rc.attack(tile, secondary);
+                        return;  // One tile per turn
+                    } else {
+                        tileToMoveTo = tile;
+                    }
+                }
+            }
+        }
+
+        // Move closer to tiles that need painting
+        if (tileToMoveTo != null) {
+            Navigation.moveTo(rc, tileToMoveTo);
+        } else if (tilesNeedingPaint == 0 && tilesWithMarks > 0) {
+            // All tiles painted but can't complete - move to center
+            Navigation.moveTo(rc, center);
         }
     }
 }
