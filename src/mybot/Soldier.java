@@ -34,6 +34,11 @@ public class Soldier {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
 
+        // ===== METRICS: Periodic self-report =====
+        if (Metrics.ENABLED && round % 500 == 0) {
+            Metrics.reportSoldierStats(rc.getID(), round);
+        }
+
         // ==================== FSM UPDATE ====================
         stateTurns++;
 
@@ -50,6 +55,8 @@ public class Soldier {
 
         // ===== PRIORITY 0: SURVIVAL =====
         if (rc.getHealth() < HEALTH_CRITICAL) {
+            Metrics.trackSoldierPriority(0);
+            Metrics.trackRetreat();
             enterState(SoldierState.RETREATING, null, round);
             retreat(rc);
             return;
@@ -58,6 +65,7 @@ public class Soldier {
         // ===== PRIORITY 1: CRITICAL ALERTS (from communication) =====
         MapLocation alertedTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_DANGER);
         if (alertedTower != null) {
+            Metrics.trackSoldierPriority(1);
             rc.setIndicatorString("P1: Responding to tower alert!");
             Navigation.moveTo(rc, alertedTower);
             Utils.tryPaintCurrent(rc);
@@ -67,6 +75,7 @@ public class Soldier {
         // ===== PRIORITY 2: DEFEND PAINT TOWERS =====
         RobotInfo towerUnderAttack = Utils.findPaintTowerUnderAttack(rc);
         if (towerUnderAttack != null) {
+            Metrics.trackSoldierPriority(2);
             enterState(SoldierState.DEFENDING_TOWER, towerUnderAttack.getLocation(), round);
             defendPaintTower(rc, towerUnderAttack);
             return;
@@ -74,6 +83,7 @@ public class Soldier {
 
         // ===== PRIORITY 3: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
+            Metrics.trackSoldierPriority(3);
             enterState(SoldierState.RETREATING, null, round);
             retreatForPaint(rc);
             return;
@@ -82,9 +92,11 @@ public class Soldier {
         // ===== PRIORITY 4: OPPORTUNISTIC KILLS =====
         RobotInfo weakEnemy = findWeakEnemy(rc);
         if (weakEnemy != null && canKill(rc, weakEnemy)) {
+            Metrics.trackSoldierPriority(4);
             rc.setIndicatorString("P4: Finishing weak enemy!");
             if (rc.canAttack(weakEnemy.getLocation())) {
                 rc.attack(weakEnemy.getLocation());
+                Metrics.trackAttack();
             }
             Navigation.moveTo(rc, weakEnemy.getLocation());
             return;
@@ -95,6 +107,7 @@ public class Soldier {
         if (round < EARLY_GAME_ROUNDS || rushAlert) {
             RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
             if (enemies.length > 0) {
+                Metrics.trackSoldierPriority(5);
                 rc.setIndicatorString("P5: Early game defense!");
                 engageEnemy(rc, Utils.closestRobot(myLoc, enemies));
                 return;
@@ -102,6 +115,7 @@ public class Soldier {
             // Stay near base
             RobotInfo nearestTower = Utils.findNearestPaintTower(rc);
             if (nearestTower != null && myLoc.distanceSquaredTo(nearestTower.getLocation()) > 100) {
+                Metrics.trackSoldierPriority(5);
                 Navigation.moveTo(rc, nearestTower.getLocation());
                 Utils.tryPaintCurrent(rc);
                 return;
@@ -112,6 +126,7 @@ public class Soldier {
         MapLocation[] ruins = rc.senseNearbyRuins(-1);
         MapLocation bestRuin = findBuildableRuin(rc, ruins);
         if (bestRuin != null) {
+            Metrics.trackSoldierPriority(6);
             targetRuin = bestRuin;
             enterState(SoldierState.BUILDING_TOWER, bestRuin, round);
             handleTowerBuilding(rc, bestRuin);
@@ -123,6 +138,7 @@ public class Soldier {
         if (enemies.length > 0) {
             RobotInfo target = Utils.closestRobot(myLoc, enemies);
             if (target != null) {
+                Metrics.trackSoldierPriority(7);
                 Comms.reportEnemy(rc, target.getLocation(), enemies.length);
                 engageEnemy(rc, target);
                 return;
@@ -130,6 +146,7 @@ public class Soldier {
         }
 
         // ===== PRIORITY 8: DEFAULT - EXPLORE & PAINT =====
+        Metrics.trackSoldierPriority(8);
         exploreAndPaint(rc);
     }
 
@@ -324,6 +341,7 @@ public class Soldier {
 
         if (rc.canCompleteTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin)) {
             rc.completeTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin);
+            Metrics.trackTowerBuilt();
             rc.setTimelineMarker("Tower built!", 0, 255, 0);
             targetRuin = null;
         }
@@ -340,6 +358,7 @@ public class Soldier {
         if (enemyTarget != null) {
             Navigation.moveTo(rc, enemyTarget);
             Utils.tryPaintCurrent(rc);
+            Metrics.trackTileContested();
             rc.setIndicatorString("P8: Contesting territory");
             return;
         }
@@ -353,6 +372,7 @@ public class Soldier {
         }
 
         Utils.tryPaintCurrent(rc);
+        Metrics.trackTileExpanded();
         rc.setIndicatorString("P8: Exploring");
     }
 
@@ -492,6 +512,7 @@ public class Soldier {
      * Execute the current FSM state.
      */
     private static void executeCurrentState(RobotController rc) throws GameActionException {
+        Metrics.trackSoldierState(state.ordinal());
         switch (state) {
             case BUILDING_TOWER:
                 continueBuildingTower(rc);

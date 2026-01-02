@@ -26,6 +26,12 @@ public class Mopper {
 
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
+        int round = rc.getRoundNum();
+
+        // ===== METRICS: Periodic self-report =====
+        if (Metrics.ENABLED && round % 500 == 0) {
+            Metrics.reportMopperStats(rc.getID(), round);
+        }
 
         // ==================== FSM UPDATE ====================
         stateTurns++;
@@ -43,18 +49,22 @@ public class Mopper {
 
         // ===== PRIORITY 0: SURVIVAL =====
         if (rc.getHealth() < HEALTH_CRITICAL) {
+            Metrics.trackMopperPriority(0);
+            Metrics.trackRetreat();
             retreat(rc);
             return;
         }
 
         // ===== PRIORITY 1: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
+            Metrics.trackMopperPriority(1);
             retreatForPaint(rc);
             return;
         }
 
         // ===== PRIORITY 2: MOP SWING (AOE ATTACK) =====
         if (tryMopSwing(rc)) {
+            Metrics.trackMopperPriority(2);
             return;
         }
 
@@ -63,6 +73,7 @@ public class Mopper {
         if (enemies.length > 0) {
             RobotInfo closest = Utils.closestRobot(myLoc, enemies);
             if (closest != null) {
+                Metrics.trackMopperPriority(3);
                 enterState(MopperState.CHASING_ENEMY, closest.getLocation());
                 chaseForMop(rc, enemies);
                 return;
@@ -72,12 +83,14 @@ public class Mopper {
         // ===== PRIORITY 4: CLEAN ENEMY PAINT =====
         MapLocation enemyPaint = findEnemyPaint(rc);
         if (enemyPaint != null) {
+            Metrics.trackMopperPriority(4);
             enterState(MopperState.CLEANING_AREA, enemyPaint);
             cleanPaint(rc, enemyPaint);
             return;
         }
 
         // ===== PRIORITY 5: DEFAULT - EXPLORE =====
+        Metrics.trackMopperPriority(5);
         explore(rc);
     }
 
@@ -110,6 +123,7 @@ public class Mopper {
 
         if (bestDir != null && bestHits > 0) {
             rc.mopSwing(bestDir);
+            Metrics.trackMopSwing();
             rc.setIndicatorString("P2: Mop swing! Hit " + bestHits + " enemies");
             return true;
         }
@@ -308,6 +322,7 @@ public class Mopper {
      * Execute the current FSM state.
      */
     private static void executeCurrentState(RobotController rc) throws GameActionException {
+        Metrics.trackMopperState(state.ordinal());
         switch (state) {
             case CHASING_ENEMY:
                 continueChasing(rc);

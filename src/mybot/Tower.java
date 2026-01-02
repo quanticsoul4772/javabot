@@ -66,6 +66,11 @@ public class Tower {
         if (round > 500 && !panicMode && !inRushMode) {
             tryUpgrade(rc);
         }
+
+        // ===== PRIORITY 8: METRICS REPORTING =====
+        if (Metrics.ENABLED) {
+            reportMetrics(rc, round);
+        }
     }
 
     // ==================== PRIORITY HELPERS ====================
@@ -278,5 +283,21 @@ public class Tower {
      */
     private static void tryUpgrade(RobotController rc) throws GameActionException {
         rc.setIndicatorString("P7: Would upgrade if possible");
+    }
+
+    /**
+     * Report tower-local metrics periodically.
+     * Note: In Battlecode, static state is NOT shared between robots.
+     * Each robot reports its own stats via unit-specific methods.
+     * Tower can only report tower-specific metrics here.
+     */
+    private static void reportMetrics(RobotController rc, int round) {
+        // Tower-specific metrics only (spawns are tracked in Tower)
+        if (round % 500 == 0) {
+            System.out.println("[TOWER #" + rc.getID() + " r" + round + "] " +
+                "spawned: soldiers=" + soldiersSpawned +
+                " moppers=" + moppersSpawned +
+                " splashers=" + splashersSpawned);
+        }
     }
 }
