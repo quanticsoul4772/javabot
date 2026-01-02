@@ -429,10 +429,13 @@ public class Soldier {
      *   - Second tower: Money Tower (economy is critical)
      *   - After that: Alternate Money/Paint, with Defense if under attack
      */
+    // Global tower counts (approximated via round-based cycling)
+    private static int globalTowersBuilt = 0;
+
     private static UnitType chooseTowerType(RobotController rc) throws GameActionException {
         int round = rc.getRoundNum();
 
-        // Count our tower types
+        // Count our tower types in visible range
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
         int paintTowers = 0;
         int moneyTowers = 0;
@@ -459,39 +462,55 @@ public class Soldier {
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         boolean underAttack = enemies.length >= 2;
 
-        // Decision logic:
-        // 1. First priority: Ensure at least 1 paint tower (we start with some)
-        // 2. Build money towers for economy (very important per postmortems)
-        // 3. If under heavy attack, build defense tower
-        // 4. Otherwise alternate money/paint favoring money
+        // Decision logic based on postmortems - "Money Is All You Need":
+        // - Money towers produce 4x resources vs paint towers
+        // - Income = (20 + 3*SRPs) * #MoneyTowers
+        // - Early: Paint tower critical for survival
+        // - Mid/Late: Money towers dominate economy
 
-        if (paintTowers == 0) {
-            // No paint towers visible - we need one!
+        // If we can see towers, use visible counts
+        int totalVisible = paintTowers + moneyTowers + defenseTowers;
+
+        if (totalVisible > 0) {
+            // We can see towers - make informed decision
+            if (underAttack && defenseTowers == 0) {
+                return UnitType.LEVEL_ONE_DEFENSE_TOWER;
+            }
+
+            // Target ratio: 2 money : 1 paint : 0-1 defense
+            // Money towers are crucial for economy!
+            if (moneyTowers < paintTowers * 2) {
+                return UnitType.LEVEL_ONE_MONEY_TOWER;
+            }
+
+            if (round > 500 && defenseTowers < 2) {
+                return UnitType.LEVEL_ONE_DEFENSE_TOWER;
+            }
+
+            if (moneyTowers <= paintTowers) {
+                return UnitType.LEVEL_ONE_MONEY_TOWER;
+            }
+
             return UnitType.LEVEL_ONE_PAINT_TOWER;
         }
 
-        if (underAttack && defenseTowers == 0) {
-            // Under attack with no defense - build one
-            return UnitType.LEVEL_ONE_DEFENSE_TOWER;
+        // No towers visible - use round-based cycling to diversify
+        // This ensures we don't only build paint towers when exploring!
+        globalTowersBuilt++;
+
+        // Early game (first 200 rounds): Build paint tower first for survival
+        if (round < 200 && globalTowersBuilt <= 1) {
+            return UnitType.LEVEL_ONE_PAINT_TOWER;
         }
 
-        // Favor money towers (2:1 ratio with paint after first paint tower)
-        // "Money Is All You Need" postmortem emphasizes money tower value
-        if (moneyTowers < paintTowers * 2) {
-            return UnitType.LEVEL_ONE_MONEY_TOWER;
+        // Cycle through tower types: Money, Money, Paint (2:1 ratio)
+        // This matches the "Money Is All You Need" strategy
+        int cycle = globalTowersBuilt % 3;
+        if (cycle == 0 || cycle == 1) {
+            return UnitType.LEVEL_ONE_MONEY_TOWER;  // 2/3 money towers
         }
 
-        // Late game: more defense towers
-        if (round > 500 && defenseTowers < 2) {
-            return UnitType.LEVEL_ONE_DEFENSE_TOWER;
-        }
-
-        // Default: alternate between money and paint
-        if (moneyTowers <= paintTowers) {
-            return UnitType.LEVEL_ONE_MONEY_TOWER;
-        }
-
-        return UnitType.LEVEL_ONE_PAINT_TOWER;
+        return UnitType.LEVEL_ONE_PAINT_TOWER;  // 1/3 paint towers
     }
 
     /**
