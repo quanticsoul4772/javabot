@@ -14,8 +14,32 @@ public class Mopper {
     private static final int HEALTH_CRITICAL = 15;
     private static final int PAINT_LOW = 30;
 
+    // ==================== FSM STATE ====================
+    enum MopperState { IDLE, CHASING_ENEMY, CLEANING_AREA }
+    private static MopperState state = MopperState.IDLE;
+    private static MapLocation stateTarget = null;
+    private static int stateTurns = 0;
+
+    // State timeout values (turns)
+    private static final int CHASING_TIMEOUT = 10;
+    private static final int CLEANING_TIMEOUT = 20;
+
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
+
+        // ==================== FSM UPDATE ====================
+        stateTurns++;
+
+        // Check state exit conditions (cheap checks first)
+        updateStateTransitions(rc);
+
+        // If in active state, execute it and return
+        if (state != MopperState.IDLE) {
+            executeCurrentState(rc);
+            return;
+        }
+
+        // ==================== PRIORITY CHAIN (when IDLE) ====================
 
         // ===== PRIORITY 0: SURVIVAL =====
         if (rc.getHealth() < HEALTH_CRITICAL) {
@@ -37,13 +61,18 @@ public class Mopper {
         // ===== PRIORITY 3: CHASE ENEMIES FOR MOP =====
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         if (enemies.length > 0) {
-            chaseForMop(rc, enemies);
-            return;
+            RobotInfo closest = Utils.closestRobot(myLoc, enemies);
+            if (closest != null) {
+                enterState(MopperState.CHASING_ENEMY, closest.getLocation());
+                chaseForMop(rc, enemies);
+                return;
+            }
         }
 
         // ===== PRIORITY 4: CLEAN ENEMY PAINT =====
         MapLocation enemyPaint = findEnemyPaint(rc);
         if (enemyPaint != null) {
+            enterState(MopperState.CLEANING_AREA, enemyPaint);
             cleanPaint(rc, enemyPaint);
             return;
         }
@@ -226,5 +255,106 @@ public class Mopper {
     private static void explore(RobotController rc) throws GameActionException {
         Utils.tryMoveRandom(rc);
         rc.setIndicatorString("P5: Exploring");
+    }
+
+    // ==================== FSM METHODS ====================
+
+    /**
+     * Enter a new FSM state.
+     */
+    private static void enterState(MopperState newState, MapLocation target) {
+        state = newState;
+        stateTarget = target;
+        stateTurns = 0;
+    }
+
+    /**
+     * Check state exit conditions and reset to IDLE if needed.
+     */
+    private static void updateStateTransitions(RobotController rc) throws GameActionException {
+        switch (state) {
+            case CHASING_ENEMY:
+                if (stateTurns > CHASING_TIMEOUT) {
+                    state = MopperState.IDLE;
+                    return;
+                }
+                // Exit if target no longer visible or we lost the chase
+                if (stateTarget != null) {
+                    RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+                    if (enemies.length == 0) {
+                        state = MopperState.IDLE;
+                    }
+                }
+                break;
+
+            case CLEANING_AREA:
+                if (stateTurns > CLEANING_TIMEOUT) {
+                    state = MopperState.IDLE;
+                    return;
+                }
+                // Exit if no more enemy paint nearby
+                MapLocation enemyPaint = findEnemyPaint(rc);
+                if (enemyPaint == null) {
+                    state = MopperState.IDLE;
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Execute the current FSM state.
+     */
+    private static void executeCurrentState(RobotController rc) throws GameActionException {
+        switch (state) {
+            case CHASING_ENEMY:
+                continueChasing(rc);
+                break;
+            case CLEANING_AREA:
+                continueCleaning(rc);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Continue chasing an enemy.
+     */
+    private static void continueChasing(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("FSM: CHASING_ENEMY t=" + stateTurns);
+
+        // First try mop swing if enemies in range
+        if (tryMopSwing(rc)) {
+            return;
+        }
+
+        // Chase the closest enemy
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        if (enemies.length > 0) {
+            RobotInfo closest = Utils.closestRobot(rc.getLocation(), enemies);
+            if (closest != null) {
+                stateTarget = closest.getLocation();
+                rc.setIndicatorLine(rc.getLocation(), stateTarget, 255, 165, 0);
+                Navigation.moveTo(rc, stateTarget);
+            }
+        }
+    }
+
+    /**
+     * Continue cleaning enemy paint in an area.
+     */
+    private static void continueCleaning(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("FSM: CLEANING_AREA t=" + stateTurns);
+
+        // Find nearest enemy paint to clean
+        MapLocation enemyPaint = findEnemyPaint(rc);
+        if (enemyPaint != null) {
+            stateTarget = enemyPaint;
+            rc.setIndicatorDot(stateTarget, 255, 0, 0);
+            cleanPaint(rc, enemyPaint);
+        }
     }
 }

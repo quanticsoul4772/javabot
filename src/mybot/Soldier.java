@@ -18,12 +18,39 @@ public class Soldier {
     private static final int WEAK_ENEMY_HEALTH = 40;
     private static final int EARLY_GAME_ROUNDS = 100;
 
+    // ==================== FSM STATE ====================
+    enum SoldierState { IDLE, BUILDING_TOWER, DEFENDING_TOWER, RETREATING }
+    private static SoldierState state = SoldierState.IDLE;
+    private static MapLocation stateTarget = null;
+    private static int stateStartRound = 0;
+    private static int stateTurns = 0;
+
+    // State timeout values (turns)
+    private static final int BUILDING_TIMEOUT = 100;
+    private static final int DEFENDING_TIMEOUT = 30;
+    private static final int RETREATING_TIMEOUT = 50;
+
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
 
+        // ==================== FSM UPDATE ====================
+        stateTurns++;
+
+        // Check state exit conditions (cheap checks first)
+        updateStateTransitions(rc);
+
+        // If in active state, execute it and return
+        if (state != SoldierState.IDLE) {
+            executeCurrentState(rc);
+            return;
+        }
+
+        // ==================== PRIORITY CHAIN (when IDLE) ====================
+
         // ===== PRIORITY 0: SURVIVAL =====
         if (rc.getHealth() < HEALTH_CRITICAL) {
+            enterState(SoldierState.RETREATING, null, round);
             retreat(rc);
             return;
         }
@@ -40,12 +67,14 @@ public class Soldier {
         // ===== PRIORITY 2: DEFEND PAINT TOWERS =====
         RobotInfo towerUnderAttack = Utils.findPaintTowerUnderAttack(rc);
         if (towerUnderAttack != null) {
+            enterState(SoldierState.DEFENDING_TOWER, towerUnderAttack.getLocation(), round);
             defendPaintTower(rc, towerUnderAttack);
             return;
         }
 
         // ===== PRIORITY 3: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
+            enterState(SoldierState.RETREATING, null, round);
             retreatForPaint(rc);
             return;
         }
@@ -84,6 +113,7 @@ public class Soldier {
         MapLocation bestRuin = findBuildableRuin(rc, ruins);
         if (bestRuin != null) {
             targetRuin = bestRuin;
+            enterState(SoldierState.BUILDING_TOWER, bestRuin, round);
             handleTowerBuilding(rc, bestRuin);
             return;
         }
@@ -364,5 +394,133 @@ public class Soldier {
         }
 
         Utils.tryMoveRandom(rc);
+    }
+
+    // ==================== FSM METHODS ====================
+
+    /**
+     * Enter a new FSM state.
+     */
+    private static void enterState(SoldierState newState, MapLocation target, int round) {
+        state = newState;
+        stateTarget = target;
+        stateStartRound = round;
+        stateTurns = 0;
+    }
+
+    /**
+     * Check state exit conditions and reset to IDLE if needed.
+     */
+    private static void updateStateTransitions(RobotController rc) throws GameActionException {
+        // Always reset on state-specific timeouts
+        switch (state) {
+            case BUILDING_TOWER:
+                if (stateTurns > BUILDING_TIMEOUT) {
+                    state = SoldierState.IDLE;
+                    return;
+                }
+                // Exit if target has a robot (tower built or enemy there)
+                if (stateTarget != null && rc.canSenseLocation(stateTarget)) {
+                    RobotInfo robot = rc.senseRobotAtLocation(stateTarget);
+                    if (robot != null) {
+                        state = SoldierState.IDLE;
+                        targetRuin = null;
+                    }
+                }
+                break;
+
+            case DEFENDING_TOWER:
+                if (stateTurns > DEFENDING_TIMEOUT) {
+                    state = SoldierState.IDLE;
+                    return;
+                }
+                // Exit if no more threats near the tower
+                if (Utils.findPaintTowerUnderAttack(rc) == null) {
+                    state = SoldierState.IDLE;
+                }
+                break;
+
+            case RETREATING:
+                if (stateTurns > RETREATING_TIMEOUT) {
+                    state = SoldierState.IDLE;
+                    return;
+                }
+                // Exit if health and paint restored
+                if (rc.getHealth() > 80 && rc.getPaint() > 100) {
+                    state = SoldierState.IDLE;
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Execute the current FSM state.
+     */
+    private static void executeCurrentState(RobotController rc) throws GameActionException {
+        switch (state) {
+            case BUILDING_TOWER:
+                continueBuildingTower(rc);
+                break;
+            case DEFENDING_TOWER:
+                continueDefending(rc);
+                break;
+            case RETREATING:
+                continueRetreating(rc);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Continue building a tower at stateTarget.
+     */
+    private static void continueBuildingTower(RobotController rc) throws GameActionException {
+        if (stateTarget == null) {
+            state = SoldierState.IDLE;
+            return;
+        }
+
+        rc.setIndicatorString("FSM: BUILDING_TOWER t=" + stateTurns);
+        rc.setIndicatorLine(rc.getLocation(), stateTarget, 0, 255, 0);
+
+        // Use existing tower building logic
+        handleTowerBuilding(rc, stateTarget);
+    }
+
+    /**
+     * Continue defending a paint tower.
+     */
+    private static void continueDefending(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("FSM: DEFENDING_TOWER t=" + stateTurns);
+
+        // Find the tower we're defending
+        RobotInfo towerUnderAttack = Utils.findPaintTowerUnderAttack(rc);
+        if (towerUnderAttack != null) {
+            defendPaintTower(rc, towerUnderAttack);
+        } else {
+            // No threat found, transition will handle exit
+            Utils.tryPaintCurrent(rc);
+        }
+    }
+
+    /**
+     * Continue retreating until health/paint restored.
+     */
+    private static void continueRetreating(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("FSM: RETREATING t=" + stateTurns);
+
+        // Decide based on what triggered the retreat
+        if (rc.getHealth() < HEALTH_CRITICAL) {
+            retreat(rc);
+        } else if (rc.getPaint() < PAINT_LOW) {
+            retreatForPaint(rc);
+        } else {
+            // Try to fully recover before re-engaging
+            retreatForPaint(rc);
+        }
     }
 }

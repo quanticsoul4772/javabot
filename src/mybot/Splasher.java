@@ -16,8 +16,32 @@ public class Splasher {
     private static final int SPLASH_HIGH_VALUE = 5;   // Great target
     private static final int SPLASH_MEDIUM_VALUE = 3; // Worth attacking
 
+    // ==================== FSM STATE ====================
+    enum SplasherState { IDLE, MOVING_TO_SPLASH, ADVANCING_TERRITORY }
+    private static SplasherState state = SplasherState.IDLE;
+    private static MapLocation stateTarget = null;
+    private static int stateTurns = 0;
+
+    // State timeout values (turns)
+    private static final int SPLASH_TIMEOUT = 15;
+    private static final int ADVANCING_TIMEOUT = 30;
+
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
+
+        // ==================== FSM UPDATE ====================
+        stateTurns++;
+
+        // Check state exit conditions (cheap checks first)
+        updateStateTransitions(rc);
+
+        // If in active state, execute it and return
+        if (state != SplasherState.IDLE) {
+            executeCurrentState(rc);
+            return;
+        }
+
+        // ==================== PRIORITY CHAIN (when IDLE) ====================
 
         // ===== PRIORITY 0: SURVIVAL =====
         if (rc.getHealth() < HEALTH_CRITICAL) {
@@ -36,6 +60,10 @@ public class Splasher {
         if (splashTarget != null) {
             int score = scoreSplashLocation(rc, splashTarget);
             if (score >= SPLASH_HIGH_VALUE) {
+                if (!rc.canAttack(splashTarget)) {
+                    // Need to move to target - enter persistent state
+                    enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
+                }
                 executeSplash(rc, splashTarget, score);
                 return;
             }
@@ -45,6 +73,9 @@ public class Splasher {
         if (splashTarget != null) {
             int score = scoreSplashLocation(rc, splashTarget);
             if (score >= SPLASH_MEDIUM_VALUE) {
+                if (!rc.canAttack(splashTarget)) {
+                    enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
+                }
                 executeSplash(rc, splashTarget, score);
                 return;
             }
@@ -53,6 +84,7 @@ public class Splasher {
         // ===== PRIORITY 4: ADVANCE TO ENEMY TERRITORY =====
         MapLocation enemyTerritory = findEnemyTerritory(rc);
         if (enemyTerritory != null) {
+            enterState(SplasherState.ADVANCING_TERRITORY, enemyTerritory);
             rc.setIndicatorString("P4: Advancing to enemy territory");
             Navigation.moveTo(rc, enemyTerritory);
             return;
@@ -216,5 +248,126 @@ public class Splasher {
     private static void explore(RobotController rc) throws GameActionException {
         Utils.tryMoveRandom(rc);
         rc.setIndicatorString("P5: Exploring");
+    }
+
+    // ==================== FSM METHODS ====================
+
+    /**
+     * Enter a new FSM state.
+     */
+    private static void enterState(SplasherState newState, MapLocation target) {
+        state = newState;
+        stateTarget = target;
+        stateTurns = 0;
+    }
+
+    /**
+     * Check state exit conditions and reset to IDLE if needed.
+     */
+    private static void updateStateTransitions(RobotController rc) throws GameActionException {
+        switch (state) {
+            case MOVING_TO_SPLASH:
+                if (stateTurns > SPLASH_TIMEOUT) {
+                    state = SplasherState.IDLE;
+                    return;
+                }
+                // Exit if we reached target or target no longer valid
+                if (stateTarget != null && rc.canAttack(stateTarget)) {
+                    state = SplasherState.IDLE;  // Will immediately attack via priority chain
+                }
+                break;
+
+            case ADVANCING_TERRITORY:
+                if (stateTurns > ADVANCING_TIMEOUT) {
+                    state = SplasherState.IDLE;
+                    return;
+                }
+                // Exit if we reached the target area
+                if (stateTarget != null) {
+                    MapLocation myLoc = rc.getLocation();
+                    if (myLoc.distanceSquaredTo(stateTarget) <= 4) {
+                        state = SplasherState.IDLE;
+                    }
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Execute the current FSM state.
+     */
+    private static void executeCurrentState(RobotController rc) throws GameActionException {
+        switch (state) {
+            case MOVING_TO_SPLASH:
+                continueMovingToSplash(rc);
+                break;
+            case ADVANCING_TERRITORY:
+                continueAdvancing(rc);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Continue moving toward a splash target.
+     */
+    private static void continueMovingToSplash(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("FSM: MOVING_TO_SPLASH t=" + stateTurns);
+
+        if (stateTarget == null) {
+            state = SplasherState.IDLE;
+            return;
+        }
+
+        // Check if we can now attack
+        if (rc.canAttack(stateTarget)) {
+            int score = scoreSplashLocation(rc, stateTarget);
+            rc.attack(stateTarget);
+            rc.setIndicatorString("FSM: SPLASH! Score=" + score);
+            rc.setIndicatorDot(stateTarget, 0, 255, 255);
+            state = SplasherState.IDLE;
+            return;
+        }
+
+        // Keep moving toward target
+        rc.setIndicatorLine(rc.getLocation(), stateTarget, 0, 255, 255);
+        Navigation.moveTo(rc, stateTarget);
+    }
+
+    /**
+     * Continue advancing into enemy territory.
+     */
+    private static void continueAdvancing(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("FSM: ADVANCING_TERRITORY t=" + stateTurns);
+
+        // Check for splash opportunities along the way
+        MapLocation splashTarget = findBestSplashTarget(rc);
+        if (splashTarget != null) {
+            int score = scoreSplashLocation(rc, splashTarget);
+            if (score >= SPLASH_MEDIUM_VALUE && rc.canAttack(splashTarget)) {
+                rc.attack(splashTarget);
+                rc.setIndicatorString("FSM: OPPORTUNISTIC SPLASH!");
+                return;
+            }
+        }
+
+        // Continue toward territory target
+        if (stateTarget != null) {
+            rc.setIndicatorLine(rc.getLocation(), stateTarget, 128, 0, 255);
+            Navigation.moveTo(rc, stateTarget);
+        } else {
+            // Lost target, find new enemy territory
+            MapLocation enemyTerritory = findEnemyTerritory(rc);
+            if (enemyTerritory != null) {
+                stateTarget = enemyTerritory;
+                Navigation.moveTo(rc, enemyTerritory);
+            } else {
+                state = SplasherState.IDLE;
+            }
+        }
     }
 }
