@@ -212,6 +212,20 @@ public class Utils {
         return count;
     }
 
+    /**
+     * Count enemy splashers visible (for adaptive spawn).
+     */
+    public static int countEnemySplashers(RobotController rc) throws GameActionException {
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        int count = 0;
+        for (RobotInfo enemy : enemies) {
+            if (enemy.getType() == UnitType.SPLASHER) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     // ========== PHASE 4: Economy Tracking ==========
 
     private static int[] moneyHistory = new int[10];

@@ -55,11 +55,56 @@ public class Mopper {
             return;
         }
 
+        // ===== PRIORITY 0.5: PAINT TOWER CRITICAL =====
+        MapLocation criticalTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_CRITICAL);
+        if (criticalTower != null) {
+            Metrics.trackMopperPriority(0);
+            rc.setIndicatorString("P0.5: TOWER CRITICAL - DEFENDING!");
+            rc.setIndicatorLine(myLoc, criticalTower, 255, 0, 0);
+            Navigation.moveTo(rc, criticalTower);
+            // Mop swing enemies near the tower
+            tryMopSwing(rc);
+            return;
+        }
+
         // ===== PRIORITY 1: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
             Metrics.trackMopperPriority(1);
             retreatForPaint(rc);
             return;
+        }
+
+        // ===== PRIORITY 1.5: PROTECT SPLASHER =====
+        MapLocation threatenedSplasher = Comms.getLocationFromMessage(rc, Comms.MessageType.SPLASHER_THREATENED);
+        if (threatenedSplasher != null) {
+            int dist = myLoc.distanceSquaredTo(threatenedSplasher);
+            if (dist <= 64) {  // Within 8 tiles
+                Metrics.trackMopperPriority(1);
+                rc.setIndicatorString("P1.5: Protecting splasher!");
+                rc.setIndicatorLine(myLoc, threatenedSplasher, 0, 255, 0);
+
+                // Find enemies near the splasher
+                RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+                RobotInfo closestToSplasher = null;
+                int closestDist = Integer.MAX_VALUE;
+                for (RobotInfo enemy : enemies) {
+                    int d = enemy.getLocation().distanceSquaredTo(threatenedSplasher);
+                    if (d < closestDist) {
+                        closestDist = d;
+                        closestToSplasher = enemy;
+                    }
+                }
+
+                if (closestToSplasher != null) {
+                    // Intercept the enemy
+                    Navigation.moveTo(rc, closestToSplasher.getLocation());
+                    tryMopSwing(rc);
+                } else {
+                    // Move to splasher location
+                    Navigation.moveTo(rc, threatenedSplasher);
+                }
+                return;
+            }
         }
 
         // ===== PRIORITY 2: MOP SWING (AOE ATTACK) =====

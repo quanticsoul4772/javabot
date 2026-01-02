@@ -56,6 +56,21 @@ public class Splasher {
             return;
         }
 
+        // ===== PRIORITY 0.5: PAINT TOWER CRITICAL =====
+        MapLocation criticalTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_CRITICAL);
+        if (criticalTower != null) {
+            Metrics.trackSplasherPriority(0);
+            rc.setIndicatorString("P0.5: TOWER CRITICAL - DEFENDING!");
+            rc.setIndicatorLine(myLoc, criticalTower, 255, 0, 0);
+            Navigation.moveTo(rc, criticalTower);
+            // Splash attack near the tower
+            if (rc.canAttack(criticalTower)) {
+                rc.attack(criticalTower);
+                Metrics.trackSplash();
+            }
+            return;
+        }
+
         // ===== PRIORITY 1: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
             Metrics.trackSplasherPriority(1);
@@ -205,7 +220,20 @@ public class Splasher {
     private static void retreat(RobotController rc) throws GameActionException {
         rc.setIndicatorString("P0: CRITICAL HEALTH - RETREATING!");
 
+        // Alert moppers to help protect us
+        MapLocation myLoc = rc.getLocation();
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+
+        // Try to send help signal to nearby mopper
+        for (RobotInfo ally : allies) {
+            if (ally.getType() == UnitType.MOPPER) {
+                if (rc.canSendMessage(ally.getLocation())) {
+                    int msg = Comms.encode(Comms.MessageType.SPLASHER_THREATENED, myLoc, 0);
+                    rc.sendMessage(ally.getLocation(), msg);
+                    break;  // Only 1 message/turn for units
+                }
+            }
+        }
         for (RobotInfo ally : allies) {
             if (ally.getType().isTowerType()) {
                 Navigation.moveTo(rc, ally.getLocation());
@@ -215,7 +243,6 @@ public class Splasher {
 
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         if (enemies.length > 0) {
-            MapLocation myLoc = rc.getLocation();
             Direction awayFromEnemy = enemies[0].getLocation().directionTo(myLoc);
             if (rc.canMove(awayFromEnemy)) {
                 rc.move(awayFromEnemy);

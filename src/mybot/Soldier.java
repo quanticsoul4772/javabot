@@ -53,12 +53,47 @@ public class Soldier {
 
         // ==================== PRIORITY CHAIN (when IDLE) ====================
 
+        // ===== PHASE CHECK =====
+        boolean defendMode = Comms.hasMessageOfType(rc, Comms.MessageType.PHASE_DEFEND);
+        boolean attackMode = Comms.hasMessageOfType(rc, Comms.MessageType.PHASE_ALL_OUT_ATTACK);
+
+        // Adjust thresholds based on phase
+        int healthThreshold = HEALTH_CRITICAL;
+        int paintThreshold = PAINT_LOW;
+        if (defendMode) {
+            // In defend mode, retreat earlier to preserve units
+            healthThreshold = HEALTH_CRITICAL + 10;  // 30 instead of 20
+            paintThreshold = PAINT_LOW + 20;         // 70 instead of 50
+        } else if (attackMode) {
+            // In attack mode, be more aggressive
+            healthThreshold = HEALTH_CRITICAL - 5;   // 15 instead of 20
+            paintThreshold = PAINT_LOW - 20;         // 30 instead of 50
+        }
+
         // ===== PRIORITY 0: SURVIVAL =====
-        if (rc.getHealth() < HEALTH_CRITICAL) {
+        if (rc.getHealth() < healthThreshold) {
             Metrics.trackSoldierPriority(0);
             Metrics.trackRetreat();
             enterState(SoldierState.RETREATING, null, round);
             retreat(rc);
+            return;
+        }
+
+        // ===== PRIORITY 0.5: PAINT TOWER CRITICAL =====
+        MapLocation criticalTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_CRITICAL);
+        if (criticalTower != null) {
+            Metrics.trackSoldierPriority(0);
+            rc.setIndicatorString("P0.5: TOWER CRITICAL - DEFENDING!");
+            rc.setIndicatorLine(myLoc, criticalTower, 255, 0, 0);
+            Navigation.moveTo(rc, criticalTower);
+            // Attack enemies near the tower
+            RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+            for (RobotInfo enemy : enemies) {
+                if (rc.canAttack(enemy.getLocation())) {
+                    rc.attack(enemy.getLocation());
+                    break;
+                }
+            }
             return;
         }
 
@@ -82,7 +117,7 @@ public class Soldier {
         }
 
         // ===== PRIORITY 3: RESUPPLY =====
-        if (rc.getPaint() < PAINT_LOW) {
+        if (rc.getPaint() < paintThreshold) {
             Metrics.trackSoldierPriority(3);
             enterState(SoldierState.RETREATING, null, round);
             retreatForPaint(rc);

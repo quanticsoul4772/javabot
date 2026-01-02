@@ -19,6 +19,14 @@ public class Tower {
     private static boolean rushDetected = false;
     private static int rushDetectedRound = 0;
 
+    // Critical health threshold (~30% of tower health)
+    private static final int TOWER_HEALTH_CRITICAL = 100;
+
+    // Phase coordination
+    private static int lastPhaseBroadcast = 0;
+    private static final int PHASE_BROADCAST_INTERVAL = 50;
+    private static final int LATE_GAME_ROUND = 1500;
+
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
@@ -40,6 +48,13 @@ public class Tower {
         detectRush(rc, round, enemySoldierCount);
         boolean inRushMode = rushDetected && (round - rushDetectedRound < 100);
 
+        // ===== PRIORITY 2.5: CRITICAL HEALTH ALERT =====
+        if (isPaintTower && rc.getHealth() < TOWER_HEALTH_CRITICAL) {
+            rc.setIndicatorString("P2.5: PAINT TOWER CRITICAL!");
+            rc.setTimelineMarker("Tower critical!", 255, 0, 0);
+            Comms.alertPaintTowerCritical(rc, myLoc);
+        }
+
         // ===== PRIORITY 3: PANIC MODE (Paint Tower under attack) =====
         boolean panicMode = isPaintTower && underThreat;
         if (panicMode) {
@@ -53,6 +68,18 @@ public class Tower {
             if (closest != null) {
                 Comms.broadcastToAllies(rc, Comms.MessageType.ENEMY_SPOTTED,
                     closest.getLocation(), enemies.length);
+            }
+        }
+
+        // ===== PRIORITY 4.5: PHASE COORDINATION =====
+        if (round - lastPhaseBroadcast >= PHASE_BROADCAST_INTERVAL) {
+            if (panicMode || inRushMode) {
+                Comms.broadcastToAllies(rc, Comms.MessageType.PHASE_DEFEND, myLoc, 0);
+                lastPhaseBroadcast = round;
+            } else if (round > LATE_GAME_ROUND) {
+                // Late game: all-out attack
+                Comms.broadcastToAllies(rc, Comms.MessageType.PHASE_ALL_OUT_ATTACK, myLoc, 0);
+                lastPhaseBroadcast = round;
             }
         }
 
@@ -116,7 +143,15 @@ public class Tower {
     private static void spawnUnit(RobotController rc, int round, boolean underThreat,
                                    boolean panicMode, boolean inRushMode,
                                    RobotInfo[] enemies) throws GameActionException {
-        UnitType toSpawn = chooseUnitToSpawn(round, underThreat, panicMode, inRushMode);
+        // Count enemy splashers for adaptive spawning
+        int enemySplashers = 0;
+        for (RobotInfo enemy : enemies) {
+            if (enemy.getType() == UnitType.SPLASHER) {
+                enemySplashers++;
+            }
+        }
+
+        UnitType toSpawn = chooseUnitToSpawn(round, underThreat, panicMode, inRushMode, enemySplashers);
         if (toSpawn == null) return;
 
         MapLocation spawnLoc = findSpawnLocation(rc, toSpawn, enemies);
@@ -142,12 +177,14 @@ public class Tower {
      *   A. Panic mode → soldiers only
      *   B. Rush mode → 90% soldiers
      *   C. Under threat → soldiers
+     *   C2. Counter enemy splashers → more soldiers/moppers
      *   D. Early game → mostly soldiers
      *   E. Mid game → balanced composition
      *   F. Late game → more splashers
      */
     private static UnitType chooseUnitToSpawn(int round, boolean underThreat,
-                                               boolean panicMode, boolean inRushMode) {
+                                               boolean panicMode, boolean inRushMode,
+                                               int enemySplashers) {
         // Sub-A: Panic mode
         if (panicMode) {
             return UnitType.SOLDIER;
@@ -161,6 +198,16 @@ public class Tower {
         // Sub-C: Under threat
         if (underThreat) {
             return UnitType.SOLDIER;
+        }
+
+        // Sub-C2: Counter enemy splashers (adaptive spawning)
+        if (enemySplashers >= 2) {
+            // Splashers are slow and vulnerable - soldiers hunt them
+            // Spawn extra soldiers/moppers to eliminate enemy splashers
+            if (Utils.rng.nextInt(10) < 7) {  // 70% soldiers
+                return UnitType.SOLDIER;
+            }
+            return UnitType.MOPPER;  // 30% moppers for mop swing
         }
 
         // Sub-D: Early game (rounds 1-300) - AGGRESSIVE SOLDIER SPAWNING

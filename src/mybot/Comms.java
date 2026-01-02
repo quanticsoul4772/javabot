@@ -23,10 +23,14 @@ public class Comms {
         RUIN_FOUND,         // 4: Unclaimed ruin found at location
         TOWER_BUILT,        // 5: Tower completed at location (payload = type)
         TOWER_BUILDING,     // 6: Soldier building tower, needs splasher support
-        HELP_NEEDED,        // 7: Unit needs assistance at location
-        ATTACK_TARGET,      // 8: Suggested attack target location
-        RETREAT,            // 9: All units retreat to location
-        ALL_CLEAR,          // 10: Threat cleared, resume normal ops
+        PAINT_TOWER_CRITICAL, // 7: Paint tower health critical, ALL units defend
+        SPLASHER_THREATENED,  // 8: Splasher under attack, moppers intercept
+        PHASE_DEFEND,         // 9: All units shift to defensive behavior
+        PHASE_ALL_OUT_ATTACK, // 10: Late game push, all units aggressive
+        HELP_NEEDED,          // 11: Unit needs assistance at location
+        ATTACK_TARGET,        // 12: Suggested attack target location
+        RETREAT,              // 13: All units retreat to location
+        ALL_CLEAR,            // 14: Threat cleared, resume normal ops
         // Add more as needed (up to 15 types with 4 bits)
     }
 
@@ -205,5 +209,12 @@ public class Comms {
             }
         }
         return false;
+    }
+
+    /**
+     * Alert when paint tower health is critical.
+     */
+    public static int alertPaintTowerCritical(RobotController rc, MapLocation towerLoc) throws GameActionException {
+        return broadcastToAllies(rc, MessageType.PAINT_TOWER_CRITICAL, towerLoc, rc.getHealth());
     }
 }
