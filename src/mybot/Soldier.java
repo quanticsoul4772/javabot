@@ -232,6 +232,7 @@ public class Soldier {
         MapLocation bestRuin = findBuildableRuin(rc, ruins);
         if (bestRuin != null) {
             Metrics.trackSoldierPriority(6);
+            Metrics.trackTowerAttempt();  // Track attempt for TowerSuccess metric
             targetRuin = bestRuin;
             enterState(SoldierState.BUILDING_TOWER, bestRuin, round);
             handleTowerBuilding(rc, bestRuin);
@@ -532,6 +533,14 @@ public class Soldier {
         rc.setIndicatorString("P6: Building " + towerName + " at " + ruin);
         rc.setIndicatorLine(myLoc, ruin, 0, 255, 0);
 
+        // CRITICAL: Soldier attack costs 5 paint - must have enough!
+        // If low on paint, retreat to refill before continuing
+        if (rc.getPaint() < 10) {
+            rc.setIndicatorString("P6: Low paint, retreating to refill");
+            retreatForPaint(rc);
+            return;
+        }
+
         // Alert splashers to help clear enemy paint on pattern tiles
         Comms.broadcastToAllies(rc, Comms.MessageType.TOWER_BUILDING, ruin, 0);
 
@@ -546,24 +555,55 @@ public class Soldier {
         }
 
         MapInfo[] patternTiles = rc.senseNearbyMapInfos(ruin, 8);
+        int tilesNeedingPaint = 0;
+        int tilesEnemyPaint = 0;
+        MapLocation tileToMoveTo = null;  // Track a tile we need to get closer to
+
         for (MapInfo tile : patternTiles) {
             PaintType mark = tile.getMark();
             PaintType paint = tile.getPaint();
 
             if (mark != PaintType.EMPTY && mark != paint) {
+                tilesNeedingPaint++;
+                MapLocation tileLoc = tile.getMapLocation();
+
+                // Soldiers CAN'T paint over enemy paint - need splasher help
+                if (paint.isEnemy()) {
+                    tilesEnemyPaint++;
+                    continue;  // Skip enemy tiles
+                }
+
                 boolean secondary = (mark == PaintType.ALLY_SECONDARY);
-                if (rc.canAttack(tile.getMapLocation())) {
-                    rc.attack(tile.getMapLocation(), secondary);
+                if (rc.canAttack(tileLoc)) {
+                    rc.attack(tileLoc, secondary);
                     return;
+                } else {
+                    // Can't attack - remember this tile to move towards it
+                    if (tileToMoveTo == null) {
+                        tileToMoveTo = tileLoc;
+                    }
                 }
             }
         }
 
-        if (rc.canCompleteTowerPattern(targetTowerType, ruin)) {
+        // If we couldn't paint anything but there are tiles needing paint, move toward them
+        if (tileToMoveTo != null && rc.isMovementReady()) {
+            Navigation.moveTo(rc, tileToMoveTo);
+            return;
+        }
+
+        // If all remaining tiles have enemy paint, we need splasher help
+        if (tilesEnemyPaint > 0 && tilesNeedingPaint == tilesEnemyPaint) {
+            rc.setIndicatorString("P6: Need splasher help - enemy paint!");
+            // Already broadcasted TOWER_BUILDING, just wait or move away
+        }
+
+        boolean canComplete = rc.canCompleteTowerPattern(targetTowerType, ruin);
+
+        if (canComplete) {
             rc.completeTowerPattern(targetTowerType, ruin);
             Metrics.trackTowerBuilt();
             rc.setTimelineMarker(towerName + " built!", 0, 255, 0);
-            System.out.println("[SOLDIER #" + rc.getID() + "] Built " + towerName + " at " + ruin);
             targetRuin = null;
             targetTowerType = null;  // Reset for next tower
         }
