@@ -274,6 +274,23 @@ public class Utils {
         return estimatedIncome / 20;
     }
 
+    /**
+     * Check if economy is strong enough for aggressive strategy.
+     * Strong = estimated income suggests 2+ money towers or 3+ SRPs.
+     */
+    public static boolean isEconomyStrong() {
+        // Income of 40+ suggests multiple money towers or SRPs
+        return estimatedIncome >= 40;
+    }
+
+    /**
+     * Check if economy is weak, requiring defensive posture.
+     */
+    public static boolean isEconomyWeak() {
+        // Income under 20 means only base tower income
+        return estimatedIncome < 20;
+    }
+
     // ========== PHASE 3: Tile Scoring ==========
 
     /**

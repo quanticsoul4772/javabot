@@ -145,10 +145,32 @@ public class Splasher {
     // ==================== HELPER METHODS ====================
 
     /**
-     * Execute a splash attack at target location.
+     * Execute a splash attack at target location with paint conservation.
      */
     private static void executeSplash(RobotController rc, MapLocation target, int score) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
+
+        // PAINT CONSERVATION: Move to ally paint before splashing if possible
+        MapInfo currentTile = rc.senseMapInfo(myLoc);
+        if (!currentTile.getPaint().isAlly() && rc.isMovementReady()) {
+            for (Direction dir : Utils.DIRECTIONS) {
+                if (!rc.canMove(dir)) continue;
+                MapLocation newLoc = myLoc.add(dir);
+                if (!rc.canSenseLocation(newLoc)) continue;
+
+                MapInfo newTile = rc.senseMapInfo(newLoc);
+                int distToTarget = newLoc.distanceSquaredTo(target);
+
+                // Must be ally paint AND in attack range
+                if (newTile.getPaint().isAlly() &&
+                    distToTarget <= rc.getType().actionRadiusSquared) {
+                    rc.move(dir);
+                    myLoc = newLoc;
+                    rc.setIndicatorString("P2/3: Repositioned to ally paint");
+                    break;
+                }
+            }
+        }
 
         if (rc.canAttack(target)) {
             rc.attack(target);

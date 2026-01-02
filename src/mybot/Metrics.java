@@ -40,6 +40,7 @@ public class Metrics {
     public static int tilesExpanded = 0;       // Empty tiles painted
     public static int towersBuilt = 0;         // Successful tower completions
     public static int towerAttempts = 0;       // Tower building attempts
+    public static int ruinsDenied = 0;         // Ruins painted to deny enemy
 
     // ==================== COMBAT STATS ====================
     public static int attacksLanded = 0;
@@ -123,6 +124,10 @@ public class Metrics {
 
     public static void trackTowerAttempt() {
         if (ENABLED) towerAttempts++;
+    }
+
+    public static void trackRuinDenied() {
+        if (ENABLED) ruinsDenied++;
     }
 
     // ==================== PER-UNIT REPORTING ====================

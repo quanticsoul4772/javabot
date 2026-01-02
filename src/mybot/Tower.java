@@ -76,9 +76,13 @@ public class Tower {
             if (panicMode || inRushMode) {
                 Comms.broadcastToAllies(rc, Comms.MessageType.PHASE_DEFEND, myLoc, 0);
                 lastPhaseBroadcast = round;
-            } else if (round > LATE_GAME_ROUND) {
-                // Late game: all-out attack
+            } else if (round > LATE_GAME_ROUND || Utils.isEconomyStrong()) {
+                // Late game OR strong economy: all-out attack
                 Comms.broadcastToAllies(rc, Comms.MessageType.PHASE_ALL_OUT_ATTACK, myLoc, 0);
+                lastPhaseBroadcast = round;
+            } else if (Utils.isEconomyWeak() && round > 300) {
+                // Weak economy after early game: defensive posture
+                Comms.broadcastToAllies(rc, Comms.MessageType.PHASE_DEFEND, myLoc, 0);
                 lastPhaseBroadcast = round;
             }
         }
@@ -208,6 +212,21 @@ public class Tower {
                 return UnitType.SOLDIER;
             }
             return UnitType.MOPPER;  // 30% moppers for mop swing
+        }
+
+        // Sub-C3: Economy-aware spawning
+        if (Utils.isEconomyWeak() && round > 200) {
+            // Weak economy: focus on soldiers for tower building
+            if (Utils.rng.nextInt(10) < 8) return UnitType.SOLDIER;  // 80%
+            return UnitType.MOPPER;  // 20%
+        }
+
+        if (Utils.isEconomyStrong() && round > 400) {
+            // Strong economy: can afford more splashers for territory push
+            int choice = Utils.rng.nextInt(10);
+            if (choice < 6) return UnitType.SPLASHER;  // 60%
+            if (choice < 9) return UnitType.SOLDIER;   // 30%
+            return UnitType.MOPPER;  // 10%
         }
 
         // Sub-D: Early game (rounds 1-300) - AGGRESSIVE SOLDIER SPAWNING

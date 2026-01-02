@@ -157,6 +157,35 @@ public class Soldier {
             }
         }
 
+        // ===== PRIORITY 5.5: RUIN DENIAL =====
+        // Paint empty ruins to deny enemy tower construction
+        MapLocation[] nearbyRuins = rc.senseNearbyRuins(-1);
+        for (MapLocation ruin : nearbyRuins) {
+            // Skip if tower already exists
+            RobotInfo robot = rc.senseRobotAtLocation(ruin);
+            if (robot != null) continue;
+
+            // Check if we can paint it (not enemy paint)
+            if (rc.canSenseLocation(ruin)) {
+                MapInfo ruinInfo = rc.senseMapInfo(ruin);
+                if (ruinInfo.getPaint().isEnemy()) {
+                    // Report for splashers to handle
+                    Comms.reportRuin(rc, ruin);
+                    continue;
+                }
+
+                // Paint to deny enemy
+                if (!ruinInfo.getPaint().isAlly() && rc.canAttack(ruin)) {
+                    Metrics.trackSoldierPriority(5);
+                    Metrics.trackRuinDenied();
+                    rc.attack(ruin);
+                    rc.setIndicatorString("P5.5: Denying ruin!");
+                    rc.setIndicatorDot(ruin, 255, 165, 0);
+                    return;
+                }
+            }
+        }
+
         // ===== PRIORITY 6: TOWER BUILDING =====
         MapLocation[] ruins = rc.senseNearbyRuins(-1);
         MapLocation bestRuin = findBuildableRuin(rc, ruins);
@@ -278,7 +307,8 @@ public class Soldier {
     }
 
     /**
-     * Engage an enemy with paint-aware movement.
+     * Engage an enemy with paint conservation.
+     * Prioritizes attacking from ally-painted tiles to reduce paint damage.
      */
     private static void engageEnemy(RobotController rc, RobotInfo enemy) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
@@ -287,11 +317,38 @@ public class Soldier {
         rc.setIndicatorString("P7: Engaging " + enemy.getType());
         rc.setIndicatorLine(myLoc, enemyLoc, 255, 128, 0);
 
-        if (rc.canAttack(enemyLoc)) {
-            rc.attack(enemyLoc);
+        // PAINT CONSERVATION: Move to ally paint before attacking if possible
+        MapInfo currentTile = rc.senseMapInfo(myLoc);
+        if (!currentTile.getPaint().isAlly() && rc.isMovementReady()) {
+            // Find adjacent ally-painted tile still in attack range
+            for (Direction dir : Utils.DIRECTIONS) {
+                if (!rc.canMove(dir)) continue;
+                MapLocation newLoc = myLoc.add(dir);
+                if (!rc.canSenseLocation(newLoc)) continue;
+
+                MapInfo newTile = rc.senseMapInfo(newLoc);
+                int distToEnemy = newLoc.distanceSquaredTo(enemyLoc);
+
+                // Must be ally paint AND in attack range
+                if (newTile.getPaint().isAlly() &&
+                    distToEnemy <= rc.getType().actionRadiusSquared) {
+                    rc.move(dir);
+                    myLoc = newLoc;
+                    rc.setIndicatorString("P7: Repositioned to ally paint");
+                    break;
+                }
+            }
         }
 
-        // Move toward enemy, prefer painted tiles
+        // Now attack from current position
+        if (rc.canAttack(enemyLoc)) {
+            rc.attack(enemyLoc);
+            Metrics.trackAttack();
+        }
+
+        // If still need to move closer, use paint-aware scoring
+        if (!rc.isMovementReady()) return;
+
         Direction toEnemy = myLoc.directionTo(enemyLoc);
         Direction[] tryDirs = {toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight()};
 
