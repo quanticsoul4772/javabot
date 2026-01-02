@@ -87,6 +87,7 @@ public class Mopper {
         // ===== PRIORITY 1.5: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
             Metrics.trackMopperPriority(1);
+            Metrics.trackLowPaint();
             retreatForPaint(rc);
             return;
         }

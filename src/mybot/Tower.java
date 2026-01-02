@@ -73,6 +73,15 @@ public class Tower {
             // Track enemy composition for strategy detection
             Utils.trackEnemyComposition(enemies);
 
+            // Track enemy sightings for metrics
+            int enemyTowerCount = 0;
+            for (RobotInfo enemy : enemies) {
+                if (enemy.getType().isTowerType()) {
+                    enemyTowerCount++;
+                }
+            }
+            Metrics.trackEnemySighting(enemies.length - enemyTowerCount, enemyTowerCount);
+
             // Find enemy closest to our location (paint tower priority)
             RobotInfo biggestThreat = null;
             int closestDist = Integer.MAX_VALUE;
@@ -416,6 +425,13 @@ public class Tower {
         }
 
         Metrics.trackPaintSample(ally, enemy, neutral);
+
+        // Track win progress (% of visible tiles that are ally)
+        int total = ally + enemy + neutral;
+        Metrics.trackWinProgress(ally, total);
+
+        // Track economy
+        Metrics.trackEconomy(rc.getMoney(), rc.getPaint());
     }
 
     /**

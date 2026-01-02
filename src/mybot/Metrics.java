@@ -76,6 +76,29 @@ public class Metrics {
     public static int messagesSent = 0;
     public static int messagesActedOn = 0;
 
+    // ==================== WIN CONDITION ====================
+    public static int mapTilesTotal = 0;
+    public static int mapTilesAlly = 0;
+    public static int winProgressPct = 0;  // Current % toward 70% victory
+
+    // ==================== TIMING MILESTONES ====================
+    public static int roundFirstTower = -1;
+    public static int roundFirstDefense = -1;
+    public static int roundFirstSRP = -1;
+    public static int roundReached50Pct = -1;
+    public static int roundReached60Pct = -1;
+
+    // ==================== ECONOMY TRACKING ====================
+    public static int peakChips = 0;
+    public static int peakPaint = 0;
+    public static int lowPaintEvents = 0;  // Times unit paint < 50
+    public static int totalPaintSpent = 0;
+
+    // ==================== ENEMY INTELLIGENCE ====================
+    public static int enemyUnitsSpotted = 0;
+    public static int enemyTowersSpotted = 0;
+    public static int enemyUnitsKilled = 0;  // Approximate via disappearance
+
     // ==================== HELPER METHODS ====================
 
     public static void trackSoldierPriority(int priority) {
@@ -222,6 +245,96 @@ public class Metrics {
         if (ENABLED) messagesActedOn++;
     }
 
+    // ==================== WIN CONDITION TRACKING ====================
+
+    /**
+     * Track progress toward 70% win condition.
+     */
+    public static void trackWinProgress(int allyTiles, int totalTiles) {
+        if (ENABLED) {
+            mapTilesAlly = allyTiles;
+            mapTilesTotal = totalTiles;
+            winProgressPct = totalTiles > 0 ? allyTiles * 100 / totalTiles : 0;
+        }
+    }
+
+    // ==================== MILESTONE TRACKING ====================
+
+    /**
+     * Track timing milestones. Type: "tower", "defense", "srp", "50pct", "60pct"
+     */
+    public static void trackMilestone(String type, int round) {
+        if (!ENABLED) return;
+        switch(type) {
+            case "tower": if (roundFirstTower < 0) roundFirstTower = round; break;
+            case "defense": if (roundFirstDefense < 0) roundFirstDefense = round; break;
+            case "srp": if (roundFirstSRP < 0) roundFirstSRP = round; break;
+            case "50pct": if (roundReached50Pct < 0) roundReached50Pct = round; break;
+            case "60pct": if (roundReached60Pct < 0) roundReached60Pct = round; break;
+        }
+    }
+
+    // ==================== ECONOMY TRACKING ====================
+
+    /**
+     * Track economy metrics (chips and paint levels).
+     */
+    public static void trackEconomy(int chips, int paint) {
+        if (ENABLED) {
+            if (chips > peakChips) peakChips = chips;
+            if (paint > peakPaint) peakPaint = paint;
+        }
+    }
+
+    /**
+     * Track low paint event.
+     */
+    public static void trackLowPaint() {
+        if (ENABLED) lowPaintEvents++;
+    }
+
+    /**
+     * Track paint spent on actions.
+     */
+    public static void trackPaintSpent(int amount) {
+        if (ENABLED) totalPaintSpent += amount;
+    }
+
+    // ==================== ENEMY INTELLIGENCE ====================
+
+    /**
+     * Track enemy sightings.
+     */
+    public static void trackEnemySighting(int units, int towers) {
+        if (ENABLED) {
+            enemyUnitsSpotted += units;
+            enemyTowersSpotted += towers;
+        }
+    }
+
+    /**
+     * Track enemy kill (approximate).
+     */
+    public static void trackEnemyKill() {
+        if (ENABLED) enemyUnitsKilled++;
+    }
+
+    // ==================== TOWER TYPE TRACKING ====================
+
+    /**
+     * Track tower built by type.
+     */
+    public static void trackTowerBuiltByType(String towerType) {
+        if (!ENABLED) return;
+        if (towerType.contains("PAINT")) {
+            paintTowersBuilt++;
+        } else if (towerType.contains("MONEY")) {
+            moneyTowersBuilt++;
+        } else if (towerType.contains("DEFENSE")) {
+            defenseTowersBuilt++;
+        }
+    }
+
     // ==================== PER-UNIT REPORTING ====================
     // Note: In Battlecode, static state is NOT shared between robots.
     // Each robot has its own Metrics instance. These functions let each
@@ -283,6 +396,14 @@ public class Metrics {
         int allyPct = totalTiles > 0 ? allyPaintTiles * 100 / totalTiles : 0;
         int enemyPct = totalTiles > 0 ? enemyPaintTiles * 100 / totalTiles : 0;
 
+        // Check for win progress milestones
+        if (winProgressPct >= 50 && roundReached50Pct < 0) {
+            roundReached50Pct = round;
+        }
+        if (winProgressPct >= 60 && roundReached60Pct < 0) {
+            roundReached60Pct = round;
+        }
+
         // Survival times (average)
         int soldierSurvival = unitDeaths[0] > 0 ? totalSurvivalTurns[0] / unitDeaths[0] : 0;
         int splasherSurvival = unitDeaths[1] > 0 ? totalSurvivalTurns[1] / unitDeaths[1] : 0;
@@ -298,10 +419,21 @@ public class Metrics {
         int msgEffectPct = messagesSent > 0 ? messagesActedOn * 100 / messagesSent : 0;
 
         System.out.println("[GAME r" + round + "] " +
+            "WinProg=" + winProgressPct + "% " +
             "Paint=" + allyPct + "%/" + enemyPct + "% " +
-            "Survival=" + soldierSurvival + "/" + splasherSurvival + " " +
-            "PaintConserv=" + conservationPct + "% " +
-            "TowerSuccess=" + towerSuccessPct + "% " +
-            "MsgEffect=" + msgEffectPct + "%");
+            "Towers=" + paintTowersBuilt + "P/" + moneyTowersBuilt + "M/" + defenseTowersBuilt + "D " +
+            "SRPs=" + srpsBuilt + " " +
+            "Contested=" + tilesContested + " " +
+            "Enemies=" + enemyUnitsSpotted + "/" + enemyTowersSpotted);
+
+        // Milestone report at end of game
+        if (round >= 1900) {
+            System.out.println("[MILESTONES] " +
+                "1stTower=r" + roundFirstTower + " " +
+                "1stDefense=r" + roundFirstDefense + " " +
+                "1stSRP=r" + roundFirstSRP + " " +
+                "50%=r" + roundReached50Pct + " " +
+                "60%=r" + roundReached60Pct);
+        }
     }
 }

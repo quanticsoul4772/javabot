@@ -144,6 +144,7 @@ public class Soldier {
         // ===== PRIORITY 3: RESUPPLY =====
         if (rc.getPaint() < paintThreshold) {
             Metrics.trackSoldierPriority(3);
+            Metrics.trackLowPaint();
             enterState(SoldierState.RETREATING, null, round);
             retreatForPaint(rc);
             return;
@@ -662,6 +663,11 @@ public class Soldier {
         if (canComplete) {
             rc.completeTowerPattern(targetTowerType, ruin);
             Metrics.trackTowerBuilt();
+            Metrics.trackTowerBuiltByType(targetTowerType.toString());
+            Metrics.trackMilestone("tower", rc.getRoundNum());
+            if (targetTowerType.toString().contains("DEFENSE")) {
+                Metrics.trackMilestone("defense", rc.getRoundNum());
+            }
             rc.setTimelineMarker(towerName + " built!", 0, 255, 0);
             System.out.println("[TOWER BUILT] " + targetTowerType + " at " + ruin);
             targetRuin = null;
@@ -981,6 +987,7 @@ public class Soldier {
         if (rc.canCompleteResourcePattern(center)) {
             rc.completeResourcePattern(center);
             Metrics.trackSRPBuilt();
+            Metrics.trackMilestone("srp", rc.getRoundNum());
             System.out.println("[SRP BUILT] #" + rc.getID() + " completed at " + center);
             rc.setTimelineMarker("SRP built!", 255, 255, 0);
             targetSRP = null;

@@ -93,6 +93,7 @@ public class Splasher {
         // ===== PRIORITY 1.5: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
             Metrics.trackSplasherPriority(1);
+            Metrics.trackLowPaint();
             retreatForPaint(rc);
             return;
         }
@@ -208,6 +209,13 @@ public class Splasher {
         }
 
         if (rc.canAttack(target)) {
+            // Track if we're contesting enemy territory
+            if (rc.canSenseLocation(target)) {
+                MapInfo targetTile = rc.senseMapInfo(target);
+                if (targetTile.getPaint().isEnemy()) {
+                    Metrics.trackTileContested();
+                }
+            }
             rc.attack(target);
             Metrics.trackSplash();
             rc.setIndicatorString("P2/3: SPLASH! Score=" + score);
