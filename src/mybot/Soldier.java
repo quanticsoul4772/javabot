@@ -621,6 +621,7 @@ public class Soldier {
             rc.completeTowerPattern(targetTowerType, ruin);
             Metrics.trackTowerBuilt();
             rc.setTimelineMarker(towerName + " built!", 0, 255, 0);
+            System.out.println("[TOWER BUILT] " + targetTowerType + " at " + ruin);
             targetRuin = null;
             targetTowerType = null;  // Reset for next tower
         }
