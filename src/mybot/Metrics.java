@@ -48,6 +48,13 @@ public class Metrics {
     public static int mopSwings = 0;
     public static int retreatsTriggered = 0;   // Times we retreated
 
+    // ==================== RETREAT TRACKING ====================
+    public static int retreatFoundTower = 0;      // Retreated and found tower
+    public static int retreatFoundPaint = 0;      // Retreated and found ally paint
+    public static int retreatWandering = 0;       // Retreated but wandering randomly
+    public static int retreatSuccessful = 0;      // Actually refilled paint
+    public static int retreatTurnsWandering = 0;  // Total turns spent wandering
+
     // ==================== UNIT LIFECYCLE ====================
     // 0=soldier, 1=splasher, 2=mopper, 3=tower
     public static int[] unitSpawned = new int[4];
@@ -159,6 +166,22 @@ public class Metrics {
 
     public static void trackRetreat() {
         if (ENABLED) retreatsTriggered++;
+    }
+
+    /**
+     * Track retreat outcome. Type: "tower", "paint", "wandering", "success"
+     */
+    public static void trackRetreatOutcome(String type) {
+        if (!ENABLED) return;
+        switch(type) {
+            case "tower": retreatFoundTower++; break;
+            case "paint": retreatFoundPaint++; break;
+            case "wandering":
+                retreatWandering++;
+                retreatTurnsWandering++;
+                break;
+            case "success": retreatSuccessful++; break;
+        }
     }
 
     public static void trackTileContested() {

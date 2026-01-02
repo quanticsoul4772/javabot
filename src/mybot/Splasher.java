@@ -15,6 +15,10 @@ public class Splasher {
     private static final int PAINT_LOW = 60;        // Lower = fight longer
     // Splash thresholds now in Scoring.java
 
+    // ==================== SPAWN LOCATION ====================
+    private static MapLocation spawnLocation = null;  // Remember where we spawned
+    private static int lastPaintLevel = 100;          // Track paint changes
+
     // ==================== FSM STATE ====================
     enum SplasherState { IDLE, MOVING_TO_SPLASH, ADVANCING_TERRITORY }
     private static SplasherState state = SplasherState.IDLE;
@@ -28,6 +32,27 @@ public class Splasher {
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
+
+        // ===== SPAWN LOCATION: Remember where we came from =====
+        if (spawnLocation == null) {
+            RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+            for (RobotInfo ally : allies) {
+                if (ally.getType().isTowerType()) {
+                    spawnLocation = ally.getLocation();
+                    break;
+                }
+            }
+            if (spawnLocation == null) {
+                spawnLocation = myLoc;
+            }
+        }
+
+        // ===== TRACK PAINT REFILL SUCCESS =====
+        int currentPaint = rc.getPaint();
+        if (currentPaint > lastPaintLevel + 20) {
+            Metrics.trackRetreatOutcome("success");
+        }
+        lastPaintLevel = currentPaint;
 
         // ===== METRICS: Periodic self-report =====
         if (Metrics.ENABLED && round % 500 == 0) {
@@ -321,24 +346,44 @@ public class Splasher {
      * Retreat for paint resupply.
      */
     private static void retreatForPaint(RobotController rc) throws GameActionException {
-        rc.setIndicatorString("P1: LOW PAINT - retreating");
+        MapLocation myLoc = rc.getLocation();
 
+        // Priority 1: Find visible tower
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
         for (RobotInfo ally : allies) {
             if (ally.getType().isTowerType()) {
+                rc.setIndicatorString("P1: Retreating to tower at " + ally.getLocation());
+                rc.setIndicatorLine(myLoc, ally.getLocation(), 0, 255, 0);
+                Metrics.trackRetreatOutcome("tower");
                 Navigation.moveTo(rc, ally.getLocation());
                 return;
             }
         }
 
+        // Priority 2: Follow ally paint trail
         MapInfo[] tiles = rc.senseNearbyMapInfos();
         for (MapInfo tile : tiles) {
             if (tile.getPaint().isAlly()) {
+                rc.setIndicatorString("P1: Following ally paint");
+                Metrics.trackRetreatOutcome("paint");
                 Navigation.moveTo(rc, tile.getMapLocation());
                 return;
             }
         }
 
+        // Priority 3: Navigate to spawn location
+        if (spawnLocation != null) {
+            int distToSpawn = myLoc.distanceSquaredTo(spawnLocation);
+            rc.setIndicatorString("P1: Returning to spawn (" + distToSpawn + " away)");
+            rc.setIndicatorLine(myLoc, spawnLocation, 255, 255, 0);
+            Metrics.trackRetreatOutcome("wandering");
+            Navigation.moveTo(rc, spawnLocation);
+            return;
+        }
+
+        // Fallback: Random movement
+        rc.setIndicatorString("P1: LOST - no spawn location!");
+        Metrics.trackRetreatOutcome("wandering");
         Utils.tryMoveRandom(rc);
     }
 
