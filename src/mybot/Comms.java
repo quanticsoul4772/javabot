@@ -217,4 +217,19 @@ public class Comms {
     public static int alertPaintTowerCritical(RobotController rc, MapLocation towerLoc) throws GameActionException {
         return broadcastToAllies(rc, MessageType.PAINT_TOWER_CRITICAL, towerLoc, rc.getHealth());
     }
+
+    /**
+     * Broadcast attack target for coordinated focus fire.
+     * Units only send 1 msg/turn, so send to first available ally.
+     */
+    public static void broadcastAttackTarget(RobotController rc, MapLocation target) throws GameActionException {
+        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+        for (RobotInfo ally : allies) {
+            if (!ally.getType().isTowerType() && rc.canSendMessage(ally.getLocation())) {
+                int msg = encode(MessageType.ATTACK_TARGET, target, 0);
+                rc.sendMessage(ally.getLocation(), msg);
+                break;  // Units can only send 1 msg/turn
+            }
+        }
+    }
 }

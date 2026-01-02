@@ -25,7 +25,7 @@ public class Tower {
     // Phase coordination
     private static int lastPhaseBroadcast = 0;
     private static final int PHASE_BROADCAST_INTERVAL = 50;
-    private static final int LATE_GAME_ROUND = 1500;
+    private static final int LATE_GAME_ROUND = 800;  // Earlier aggression
 
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
@@ -60,6 +60,29 @@ public class Tower {
         if (panicMode) {
             rc.setIndicatorString("P3: PAINT TOWER UNDER ATTACK!");
             Comms.alertPaintTowerDanger(rc, myLoc);
+        }
+
+        // ===== PRIORITY 3.5: COORDINATE ATTACK ON THREATS =====
+        // Find allies' paint towers and coordinate attacks on enemies near them
+        if (enemies.length > 0) {
+            // Track enemy composition for strategy detection
+            Utils.trackEnemyComposition(enemies);
+
+            // Find enemy closest to our location (paint tower priority)
+            RobotInfo biggestThreat = null;
+            int closestDist = Integer.MAX_VALUE;
+            for (RobotInfo enemy : enemies) {
+                int dist = enemy.getLocation().distanceSquaredTo(myLoc);
+                if (dist < closestDist && dist <= 64) {  // Within 8 tiles
+                    closestDist = dist;
+                    biggestThreat = enemy;
+                }
+            }
+
+            if (biggestThreat != null) {
+                Comms.broadcastToAllies(rc, Comms.MessageType.ATTACK_TARGET,
+                    biggestThreat.getLocation(), closestDist);
+            }
         }
 
         // ===== PRIORITY 4: BROADCAST THREATS =====
@@ -181,6 +204,7 @@ public class Tower {
      *   A. Panic mode → soldiers only
      *   B. Rush mode → 90% soldiers
      *   C. Under threat → soldiers
+     *   C1. Strategy counter → adaptive spawning
      *   C2. Counter enemy splashers → more soldiers/moppers
      *   D. Early game → mostly soldiers
      *   E. Mid game → balanced composition
@@ -202,6 +226,24 @@ public class Tower {
         // Sub-C: Under threat
         if (underThreat) {
             return UnitType.SOLDIER;
+        }
+
+        // Sub-C1: Strategy-based counter spawning
+        Utils.EnemyStrategy strategy = Utils.detectEnemyStrategy(round);
+        switch (strategy) {
+            case RUSHING:
+                // Counter rush with soldiers
+                return UnitType.SOLDIER;
+            case SPLASHER_HEAVY:
+                // Counter splashers with soldiers to hunt them
+                if (Utils.rng.nextInt(10) < 8) return UnitType.SOLDIER;
+                return UnitType.MOPPER;
+            case TURTLING:
+                // Break turtle with splashers
+                if (Utils.rng.nextInt(10) < 7) return UnitType.SPLASHER;
+                return UnitType.SOLDIER;
+            default:
+                break;  // Fall through to normal logic
         }
 
         // Sub-C2: Counter enemy splashers (adaptive spawning)

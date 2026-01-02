@@ -10,8 +10,8 @@ import battlecode.common.*;
  */
 public class Mopper {
 
-    // Thresholds (tune these during competition)
-    private static final int HEALTH_CRITICAL = 15;
+    // Thresholds (tune these during competition) - AGGRESSIVE
+    private static final int HEALTH_CRITICAL = 10;  // Lower = fight longer
     private static final int PAINT_LOW = 30;
 
     // ==================== FSM STATE ====================
@@ -20,8 +20,8 @@ public class Mopper {
     private static MapLocation stateTarget = null;
     private static int stateTurns = 0;
 
-    // State timeout values (turns)
-    private static final int CHASING_TIMEOUT = 10;
+    // State timeout values (turns) - AGGRESSIVE
+    private static final int CHASING_TIMEOUT = 25;  // Longer = chase harder
     private static final int CLEANING_TIMEOUT = 20;
 
     public static void run(RobotController rc) throws GameActionException {
@@ -67,7 +67,23 @@ public class Mopper {
             return;
         }
 
-        // ===== PRIORITY 1: RESUPPLY =====
+        // ===== PRIORITY 1: COORDINATED ATTACK (focus fire) =====
+        MapLocation attackTarget = Comms.getLocationFromMessage(rc, Comms.MessageType.ATTACK_TARGET);
+        if (attackTarget != null) {
+            int dist = myLoc.distanceSquaredTo(attackTarget);
+            if (dist <= 100) {  // Within 10 tiles
+                Metrics.trackMopperPriority(1);
+                rc.setIndicatorString("P1: FOCUS FIRE!");
+                rc.setIndicatorLine(myLoc, attackTarget, 255, 0, 255);
+
+                Navigation.moveTo(rc, attackTarget);
+                // Try mop swing when we get close
+                tryMopSwing(rc);
+                return;
+            }
+        }
+
+        // ===== PRIORITY 1.5: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
             Metrics.trackMopperPriority(1);
             retreatForPaint(rc);

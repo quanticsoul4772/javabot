@@ -12,10 +12,10 @@ public class Soldier {
 
     private static MapLocation targetRuin = null;
 
-    // Thresholds (tune these during competition)
-    private static final int HEALTH_CRITICAL = 20;
-    private static final int PAINT_LOW = 50;
-    private static final int WEAK_ENEMY_HEALTH = 40;
+    // Thresholds (tune these during competition) - AGGRESSIVE
+    private static final int HEALTH_CRITICAL = 15;  // Lower = fight longer
+    private static final int PAINT_LOW = 30;        // Lower = fight longer
+    private static final int WEAK_ENEMY_HEALTH = 60; // Higher = target more enemies
     private static final int EARLY_GAME_ROUNDS = 100;
 
     // ==================== FSM STATE ====================
@@ -97,7 +97,25 @@ public class Soldier {
             return;
         }
 
-        // ===== PRIORITY 1: CRITICAL ALERTS (from communication) =====
+        // ===== PRIORITY 1: COORDINATED ATTACK (focus fire) =====
+        MapLocation attackTarget = Comms.getLocationFromMessage(rc, Comms.MessageType.ATTACK_TARGET);
+        if (attackTarget != null) {
+            int dist = myLoc.distanceSquaredTo(attackTarget);
+            if (dist <= 100) {  // Within 10 tiles
+                Metrics.trackSoldierPriority(1);
+                rc.setIndicatorString("P1: FOCUS FIRE!");
+                rc.setIndicatorLine(myLoc, attackTarget, 255, 0, 255);
+
+                if (rc.canAttack(attackTarget)) {
+                    rc.attack(attackTarget);
+                    Metrics.trackAttack();
+                }
+                Navigation.moveTo(rc, attackTarget);
+                return;
+            }
+        }
+
+        // ===== PRIORITY 1.5: CRITICAL ALERTS (from communication) =====
         MapLocation alertedTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_DANGER);
         if (alertedTower != null) {
             Metrics.trackSoldierPriority(1);
@@ -135,6 +153,26 @@ public class Soldier {
             }
             Navigation.moveTo(rc, weakEnemy.getLocation());
             return;
+        }
+
+        // ===== PRIORITY 4.5: HUNT ENEMY TOWERS =====
+        RobotInfo[] allEnemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        for (RobotInfo enemy : allEnemies) {
+            if (Utils.isPaintTower(enemy.getType())) {
+                Metrics.trackSoldierPriority(4);
+                rc.setIndicatorString("P4.5: HUNTING ENEMY TOWER!");
+                rc.setIndicatorLine(myLoc, enemy.getLocation(), 255, 0, 0);
+
+                // Broadcast to coordinate attack
+                Comms.broadcastAttackTarget(rc, enemy.getLocation());
+
+                if (rc.canAttack(enemy.getLocation())) {
+                    rc.attack(enemy.getLocation());
+                    Metrics.trackAttack();
+                }
+                Navigation.moveTo(rc, enemy.getLocation());
+                return;
+            }
         }
 
         // ===== PRIORITY 5: EARLY GAME / RUSH DEFENSE =====
@@ -197,13 +235,16 @@ public class Soldier {
             return;
         }
 
-        // ===== PRIORITY 7: COMBAT =====
+        // ===== PRIORITY 7: COMBAT (threat-based targeting) =====
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         if (enemies.length > 0) {
-            RobotInfo target = Utils.closestRobot(myLoc, enemies);
+            // Use threat-based targeting for intelligent combat
+            RobotInfo target = Utils.findHighestThreat(rc, enemies);
             if (target != null) {
                 Metrics.trackSoldierPriority(7);
                 Comms.reportEnemy(rc, target.getLocation(), enemies.length);
+                // Broadcast for focus fire coordination
+                Comms.broadcastAttackTarget(rc, target.getLocation());
                 engageEnemy(rc, target);
                 return;
             }

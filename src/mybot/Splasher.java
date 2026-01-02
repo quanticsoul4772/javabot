@@ -10,9 +10,9 @@ import battlecode.common.*;
  */
 public class Splasher {
 
-    // Thresholds (tune these during competition)
-    private static final int HEALTH_CRITICAL = 30;
-    private static final int PAINT_LOW = 100;
+    // Thresholds (tune these during competition) - AGGRESSIVE
+    private static final int HEALTH_CRITICAL = 20;  // Lower = fight longer
+    private static final int PAINT_LOW = 60;        // Lower = fight longer
     // Splash thresholds now in Scoring.java
 
     // ==================== FSM STATE ====================
@@ -71,7 +71,25 @@ public class Splasher {
             return;
         }
 
-        // ===== PRIORITY 1: RESUPPLY =====
+        // ===== PRIORITY 1: COORDINATED ATTACK (focus fire) =====
+        MapLocation attackTarget = Comms.getLocationFromMessage(rc, Comms.MessageType.ATTACK_TARGET);
+        if (attackTarget != null) {
+            int dist = myLoc.distanceSquaredTo(attackTarget);
+            if (dist <= 100) {  // Within 10 tiles
+                Metrics.trackSplasherPriority(1);
+                rc.setIndicatorString("P1: FOCUS FIRE!");
+                rc.setIndicatorLine(myLoc, attackTarget, 255, 0, 255);
+
+                if (rc.canAttack(attackTarget)) {
+                    rc.attack(attackTarget);
+                    Metrics.trackSplash();
+                }
+                Navigation.moveTo(rc, attackTarget);
+                return;
+            }
+        }
+
+        // ===== PRIORITY 1.5: RESUPPLY =====
         if (rc.getPaint() < PAINT_LOW) {
             Metrics.trackSplasherPriority(1);
             retreatForPaint(rc);
@@ -109,6 +127,18 @@ public class Splasher {
                     enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
                 }
                 executeSplash(rc, splashTarget, score);
+                return;
+            }
+        }
+
+        // ===== PRIORITY 2.5: ATTACK ENEMIES (combat splash) =====
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        if (enemies.length > 0) {
+            RobotInfo target = Utils.closestRobot(myLoc, enemies);
+            if (target != null && rc.canAttack(target.getLocation())) {
+                rc.attack(target.getLocation());
+                Metrics.trackSplash();
+                rc.setIndicatorString("P2.5: Combat splash!");
                 return;
             }
         }

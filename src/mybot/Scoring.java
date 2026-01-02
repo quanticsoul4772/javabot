@@ -43,11 +43,11 @@ public class Scoring {
     public static final int WEIGHT_LOW_PAINT = -20;
     public static final int WEIGHT_FULL_RESOURCES = 5;
 
-    // ==================== THRESHOLDS ====================
+    // ==================== THRESHOLDS ==================== (AGGRESSIVE)
     public static final int THRESHOLD_GOOD_TILE = 5;
     public static final int THRESHOLD_BAD_TILE = -10;
-    public static final int THRESHOLD_SPLASH_WORTH = 3;
-    public static final int THRESHOLD_SPLASH_HIGH = 5;
+    public static final int THRESHOLD_SPLASH_WORTH = 2;  // Lower = splash more often
+    public static final int THRESHOLD_SPLASH_HIGH = 4;   // Lower = splash more often
     public static final int THRESHOLD_HIGH_THREAT = -25;
 
     // ==================== SCORING METHODS ====================

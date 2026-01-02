@@ -15,11 +15,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew update                   # Update to latest Battlecode version
 ```
 
-**Windows Note**: Requires JAVA_HOME set to Java 21. If not set in environment:
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"
-./gradlew build
-```
+**Windows Note**: Requires JAVA_HOME set to Java 21.
+- JAVA_HOME is configured at: `C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot`
+- If builds fail with "JAVA_HOME not set", run: `setx JAVA_HOME "C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"`
 
 ## Architecture
 

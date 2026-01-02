@@ -291,6 +291,96 @@ public class Utils {
         return estimatedIncome < 20;
     }
 
+    // ========== PHASE 5: Threat Scoring & Strategy Detection ==========
+
+    /**
+     * Enemy strategy types for adaptive play.
+     */
+    public enum EnemyStrategy { UNKNOWN, RUSHING, TURTLING, SPLASHER_HEAVY, BALANCED }
+
+    // Enemy composition tracking
+    private static int enemySoldiersSeenTotal = 0;
+    private static int enemySplashersSeenTotal = 0;
+    private static int enemyMoppersSeenTotal = 0;
+
+    /**
+     * Track enemy composition for strategy detection.
+     */
+    public static void trackEnemyComposition(RobotInfo[] enemies) {
+        for (RobotInfo enemy : enemies) {
+            switch (enemy.getType()) {
+                case SOLDIER: enemySoldiersSeenTotal++; break;
+                case SPLASHER: enemySplashersSeenTotal++; break;
+                case MOPPER: enemyMoppersSeenTotal++; break;
+                default: break;
+            }
+        }
+    }
+
+    /**
+     * Detect enemy strategy based on unit composition.
+     */
+    public static EnemyStrategy detectEnemyStrategy(int round) {
+        int total = enemySoldiersSeenTotal + enemySplashersSeenTotal + enemyMoppersSeenTotal;
+        if (total < 5) return EnemyStrategy.UNKNOWN;
+
+        float soldierRatio = (float) enemySoldiersSeenTotal / total;
+        float splasherRatio = (float) enemySplashersSeenTotal / total;
+
+        if (round < 200 && soldierRatio > 0.8) return EnemyStrategy.RUSHING;
+        if (splasherRatio > 0.5) return EnemyStrategy.SPLASHER_HEAVY;
+        if (soldierRatio < 0.3 && round > 300) return EnemyStrategy.TURTLING;
+        return EnemyStrategy.BALANCED;
+    }
+
+    /**
+     * Score threat level of an enemy (higher = more dangerous).
+     */
+    public static int scoreThreat(RobotInfo enemy, MapLocation nearestPaintTower) {
+        int score = 0;
+
+        // Type scoring
+        switch (enemy.getType()) {
+            case SPLASHER: score += 30; break;  // Can destroy our paint
+            case SOLDIER: score += 20; break;   // Can build/attack
+            case MOPPER: score += 10; break;    // Support unit
+            default: break;
+        }
+
+        // Tower threat: enemy near our paint tower
+        if (nearestPaintTower != null) {
+            int distToTower = enemy.getLocation().distanceSquaredTo(nearestPaintTower);
+            if (distToTower <= 25) score += 50;      // Very close
+            else if (distToTower <= 64) score += 25; // Nearby
+        }
+
+        // Health: prioritize finishing wounded enemies
+        if (enemy.getHealth() < 30) score += 20;
+        else if (enemy.getHealth() < 50) score += 10;
+
+        return score;
+    }
+
+    /**
+     * Find the highest threat enemy for intelligent targeting.
+     */
+    public static RobotInfo findHighestThreat(RobotController rc, RobotInfo[] enemies) throws GameActionException {
+        RobotInfo nearestPaintTower = findNearestPaintTower(rc);
+        MapLocation towerLoc = nearestPaintTower != null ? nearestPaintTower.getLocation() : null;
+
+        RobotInfo best = null;
+        int bestScore = 0;
+
+        for (RobotInfo enemy : enemies) {
+            int score = scoreThreat(enemy, towerLoc);
+            if (score > bestScore) {
+                bestScore = score;
+                best = enemy;
+            }
+        }
+        return best;
+    }
+
     // ========== PHASE 3: Tile Scoring ==========
 
     /**
