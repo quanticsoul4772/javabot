@@ -264,6 +264,7 @@ public class Utils {
 
     /**
      * Score a tile for movement preference (higher = better).
+     * Uses centralized weights from Scoring class.
      */
     public static int scoreTile(RobotController rc, MapLocation loc) throws GameActionException {
         if (!rc.canSenseLocation(loc)) return -100;
@@ -274,11 +275,10 @@ public class Utils {
         int score = 0;
         PaintType paint = info.getPaint();
 
-        // Strong preference for ally paint (saves our paint)
-        if (paint.isAlly()) score += 10;
-        // Avoid enemy paint (drains our paint)
-        else if (paint.isEnemy()) score -= 5;
-        // Neutral is okay
+        // Use centralized weights
+        if (paint.isAlly()) score += Scoring.WEIGHT_ALLY_PAINT;
+        else if (paint.isEnemy()) score += Scoring.WEIGHT_ENEMY_PAINT;
+        else score += Scoring.WEIGHT_NEUTRAL;
 
         return score;
     }

@@ -13,8 +13,7 @@ public class Splasher {
     // Thresholds (tune these during competition)
     private static final int HEALTH_CRITICAL = 30;
     private static final int PAINT_LOW = 100;
-    private static final int SPLASH_HIGH_VALUE = 5;   // Great target
-    private static final int SPLASH_MEDIUM_VALUE = 3; // Worth attacking
+    // Splash thresholds now in Scoring.java
 
     // ==================== FSM STATE ====================
     enum SplasherState { IDLE, MOVING_TO_SPLASH, ADVANCING_TERRITORY }
@@ -58,8 +57,8 @@ public class Splasher {
         // ===== PRIORITY 2: HIGH-VALUE SPLASH (5+ tiles) =====
         MapLocation splashTarget = findBestSplashTarget(rc);
         if (splashTarget != null) {
-            int score = scoreSplashLocation(rc, splashTarget);
-            if (score >= SPLASH_HIGH_VALUE) {
+            int score = Scoring.scoreSplashTarget(rc, splashTarget);
+            if (score >= Scoring.THRESHOLD_SPLASH_HIGH) {
                 if (!rc.canAttack(splashTarget)) {
                     // Need to move to target - enter persistent state
                     enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
@@ -71,8 +70,8 @@ public class Splasher {
 
         // ===== PRIORITY 3: MEDIUM-VALUE SPLASH (3+ tiles) =====
         if (splashTarget != null) {
-            int score = scoreSplashLocation(rc, splashTarget);
-            if (score >= SPLASH_MEDIUM_VALUE) {
+            int score = Scoring.scoreSplashTarget(rc, splashTarget);
+            if (score >= Scoring.THRESHOLD_SPLASH_WORTH) {
                 if (!rc.canAttack(splashTarget)) {
                     enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
                 }
@@ -131,7 +130,7 @@ public class Splasher {
             // Must be in or near attack range
             if (dist > rc.getType().actionRadiusSquared + 4) continue;
 
-            int score = scoreSplashLocation(rc, loc);
+            int score = Scoring.scoreSplashTarget(rc, loc);
             if (score > bestScore) {
                 bestScore = score;
                 best = loc;
@@ -141,33 +140,7 @@ public class Splasher {
         return best;
     }
 
-    /**
-     * Score a location for splash attack.
-     * Enemy paint = 2 points, neutral = 1 point.
-     */
-    private static int scoreSplashLocation(RobotController rc, MapLocation center) throws GameActionException {
-        int score = 0;
-
-        // Check 3x3 area around splash center
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                MapLocation loc = center.translate(dx, dy);
-                if (!rc.canSenseLocation(loc)) continue;
-
-                MapInfo info = rc.senseMapInfo(loc);
-                if (!info.isPassable()) continue;
-
-                PaintType paint = info.getPaint();
-                if (paint.isEnemy()) {
-                    score += 2;
-                } else if (paint == PaintType.EMPTY) {
-                    score += 1;
-                }
-            }
-        }
-
-        return score;
-    }
+    // Splash scoring now in Scoring.java
 
     /**
      * Find enemy territory to contest.
@@ -325,7 +298,7 @@ public class Splasher {
 
         // Check if we can now attack
         if (rc.canAttack(stateTarget)) {
-            int score = scoreSplashLocation(rc, stateTarget);
+            int score = Scoring.scoreSplashTarget(rc, stateTarget);
             rc.attack(stateTarget);
             rc.setIndicatorString("FSM: SPLASH! Score=" + score);
             rc.setIndicatorDot(stateTarget, 0, 255, 255);
@@ -347,8 +320,8 @@ public class Splasher {
         // Check for splash opportunities along the way
         MapLocation splashTarget = findBestSplashTarget(rc);
         if (splashTarget != null) {
-            int score = scoreSplashLocation(rc, splashTarget);
-            if (score >= SPLASH_MEDIUM_VALUE && rc.canAttack(splashTarget)) {
+            int score = Scoring.scoreSplashTarget(rc, splashTarget);
+            if (score >= Scoring.THRESHOLD_SPLASH_WORTH && rc.canAttack(splashTarget)) {
                 rc.attack(splashTarget);
                 rc.setIndicatorString("FSM: OPPORTUNISTIC SPLASH!");
                 return;

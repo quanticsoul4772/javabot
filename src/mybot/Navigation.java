@@ -187,12 +187,12 @@ public class Navigation {
             int distBefore = myLoc.distanceSquaredTo(target);
             int distAfter = newLoc.distanceSquaredTo(target);
             if (distAfter < distBefore) {
-                score += 20;  // Big bonus for getting closer
+                score += Scoring.WEIGHT_GETTING_CLOSER_BONUS;
             }
 
             // Penalty for the non-direct directions
             if (dir != targetDir) {
-                score -= 2;
+                score += Scoring.WEIGHT_NON_DIRECT_PENALTY;
             }
 
             if (score > bestScore) {
