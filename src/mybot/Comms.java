@@ -22,10 +22,11 @@ public class Comms {
         PAINT_TOWER_DANGER, // 3: Paint tower under attack at location
         RUIN_FOUND,         // 4: Unclaimed ruin found at location
         TOWER_BUILT,        // 5: Tower completed at location (payload = type)
-        HELP_NEEDED,        // 6: Unit needs assistance at location
-        ATTACK_TARGET,      // 7: Suggested attack target location
-        RETREAT,            // 8: All units retreat to location
-        ALL_CLEAR,          // 9: Threat cleared, resume normal ops
+        TOWER_BUILDING,     // 6: Soldier building tower, needs splasher support
+        HELP_NEEDED,        // 7: Unit needs assistance at location
+        ATTACK_TARGET,      // 8: Suggested attack target location
+        RETREAT,            // 9: All units retreat to location
+        ALL_CLEAR,          // 10: Threat cleared, resume normal ops
         // Add more as needed (up to 15 types with 4 bits)
     }
 

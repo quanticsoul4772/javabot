@@ -180,17 +180,17 @@ public class Tower {
             float soldierRatio = (float) soldiersSpawned / total;
             float mopperRatio = (float) moppersSpawned / total;
 
-            // Target: 50% soldiers, 30% moppers, 20% splashers
-            if (soldierRatio < 0.5) return UnitType.SOLDIER;
-            if (mopperRatio < 0.3) return UnitType.MOPPER;
+            // Target: 40% soldiers, 20% moppers, 40% splashers (MORE SPLASHERS)
+            if (soldierRatio < 0.4) return UnitType.SOLDIER;
+            if (mopperRatio < 0.2) return UnitType.MOPPER;
             return UnitType.SPLASHER;
         }
 
-        // Sub-F: Late game (600+)
+        // Sub-F: Late game (600+) - SPLASHER HEAVY
         int choice = Utils.rng.nextInt(10);
-        if (choice < 4) return UnitType.SOLDIER;
-        if (choice < 6) return UnitType.MOPPER;
-        return UnitType.SPLASHER;
+        if (choice < 3) return UnitType.SOLDIER;  // 30%
+        if (choice < 5) return UnitType.MOPPER;   // 20%
+        return UnitType.SPLASHER;                  // 50%
     }
 
     // ==================== HELPER METHODS ====================

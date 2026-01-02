@@ -63,6 +63,26 @@ public class Splasher {
             return;
         }
 
+        // ===== PRIORITY 1.5: SUPPORT TOWER BUILDING =====
+        // Soldiers can't paint over enemy paint - splashers must help!
+        MapLocation towerSite = Comms.getLocationFromMessage(rc, Comms.MessageType.TOWER_BUILDING);
+        if (towerSite != null) {
+            int dist = myLoc.distanceSquaredTo(towerSite);
+            // Only respond if reasonably close (within 100 tiles squared)
+            if (dist <= 100) {
+                Metrics.trackSplasherPriority(2);  // Counts as high-value
+                rc.setIndicatorString("P1.5: Supporting tower build at " + towerSite);
+                rc.setIndicatorLine(myLoc, towerSite, 0, 255, 0);
+                if (dist <= rc.getType().actionRadiusSquared && rc.canAttack(towerSite)) {
+                    rc.attack(towerSite);
+                    Metrics.trackSplash();
+                } else {
+                    Navigation.moveTo(rc, towerSite);
+                }
+                return;
+            }
+        }
+
         // ===== PRIORITY 2: HIGH-VALUE SPLASH (5+ tiles) =====
         MapLocation splashTarget = findBestSplashTarget(rc);
         if (splashTarget != null) {
@@ -78,27 +98,28 @@ public class Splasher {
             }
         }
 
-        // ===== PRIORITY 3: MEDIUM-VALUE SPLASH (3+ tiles) =====
+        // ===== PRIORITY 3: ADVANCE TO ENEMY TERRITORY (moved up) =====
+        // Splashers are the ONLY units that can contest enemy paint!
+        MapLocation enemyTerritory = findEnemyTerritory(rc);
+        if (enemyTerritory != null) {
+            Metrics.trackSplasherPriority(3);
+            enterState(SplasherState.ADVANCING_TERRITORY, enemyTerritory);
+            rc.setIndicatorString("P3: Advancing to enemy territory");
+            Navigation.moveTo(rc, enemyTerritory);
+            return;
+        }
+
+        // ===== PRIORITY 4: MEDIUM-VALUE SPLASH (3+ tiles) =====
         if (splashTarget != null) {
             int score = Scoring.scoreSplashTarget(rc, splashTarget);
             if (score >= Scoring.THRESHOLD_SPLASH_WORTH) {
-                Metrics.trackSplasherPriority(3);
+                Metrics.trackSplasherPriority(4);
                 if (!rc.canAttack(splashTarget)) {
                     enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
                 }
                 executeSplash(rc, splashTarget, score);
                 return;
             }
-        }
-
-        // ===== PRIORITY 4: ADVANCE TO ENEMY TERRITORY =====
-        MapLocation enemyTerritory = findEnemyTerritory(rc);
-        if (enemyTerritory != null) {
-            Metrics.trackSplasherPriority(4);
-            enterState(SplasherState.ADVANCING_TERRITORY, enemyTerritory);
-            rc.setIndicatorString("P4: Advancing to enemy territory");
-            Navigation.moveTo(rc, enemyTerritory);
-            return;
         }
 
         // ===== PRIORITY 5: DEFAULT - EXPLORE =====

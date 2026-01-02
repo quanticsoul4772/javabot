@@ -315,6 +315,9 @@ public class Soldier {
         rc.setIndicatorString("P6: Building tower at " + ruin);
         rc.setIndicatorLine(myLoc, ruin, 0, 255, 0);
 
+        // Alert splashers to help clear enemy paint on pattern tiles
+        Comms.broadcastToAllies(rc, Comms.MessageType.TOWER_BUILDING, ruin, 0);
+
         if (myLoc.distanceSquaredTo(ruin) > 2) {
             Navigation.moveTo(rc, ruin);
             Utils.tryPaintCurrent(rc);
@@ -348,54 +351,28 @@ public class Soldier {
     }
 
     /**
-     * Default behavior: paint and explore - SIMPLIFIED for speed.
+     * Default behavior: paint and explore.
+     * NOTE: Soldiers CANNOT paint over enemy paint - only splashers can!
+     * Focus on expanding into unpainted territory.
      */
     private static void exploreAndPaint(RobotController rc) throws GameActionException {
         Utils.tryPaintCurrent(rc);
 
-        // Priority 1: Enemy paint (contest territory)
-        MapLocation enemyTarget = findEnemyPaint(rc);
-        if (enemyTarget != null) {
-            Navigation.moveTo(rc, enemyTarget);
-            Utils.tryPaintCurrent(rc);
-            Metrics.trackTileContested();
-            rc.setIndicatorString("P8: Contesting territory");
-            return;
-        }
-
-        // Priority 2: Any unpainted tile
+        // Priority 1: Find unpainted tiles (real expansion)
         MapLocation paintTarget = findUnpaintedTile(rc);
         if (paintTarget != null) {
             Navigation.moveTo(rc, paintTarget);
-        } else {
-            Utils.tryMoveRandom(rc);
+            Utils.tryPaintCurrent(rc);
+            Metrics.trackTileExpanded();
+            rc.setIndicatorString("P8: Expanding territory");
+            return;
         }
 
+        // Priority 2: Random exploration when no unpainted nearby
+        Utils.tryMoveRandom(rc);
         Utils.tryPaintCurrent(rc);
         Metrics.trackTileExpanded();
         rc.setIndicatorString("P8: Exploring");
-    }
-
-    /**
-     * Find nearest enemy paint to contest.
-     */
-    private static MapLocation findEnemyPaint(RobotController rc) throws GameActionException {
-        MapInfo[] tiles = rc.senseNearbyMapInfos();
-        MapLocation myLoc = rc.getLocation();
-        MapLocation best = null;
-        int bestDist = Integer.MAX_VALUE;
-
-        for (MapInfo tile : tiles) {
-            if (!tile.isPassable()) continue;
-            if (tile.getPaint().isEnemy()) {
-                int dist = myLoc.distanceSquaredTo(tile.getMapLocation());
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = tile.getMapLocation();
-                }
-            }
-        }
-        return best;
     }
 
     /**
