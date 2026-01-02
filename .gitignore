@@ -203,3 +203,6 @@ matches/
 # Version tracking files
 client_version.txt
 engine_version.txt
+
+# Claude Code MCP configuration (contains API keys)
+.mcp.json

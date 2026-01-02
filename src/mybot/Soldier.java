@@ -3,150 +3,192 @@ package mybot;
 import battlecode.common.*;
 
 /**
- * Soldier behavior: primary combat and territory control unit.
+ * Soldier behavior using Priority Chain Pattern.
  *
- * Priorities (UPDATED based on winning strategies):
- * 0. CRITICAL: Defend Paint Towers under attack
- * 1. Early game: Stay near base to counter rushes
- * 2. Build towers on ruins
- * 3. Attack enemies in range
- * 4. Paint territory (prefer ally-painted tiles)
- * 5. Explore unpainted areas
+ * Priorities are processed in order - first match wins (early return).
+ * Easy to reorder by moving code blocks.
  */
 public class Soldier {
 
     private static MapLocation targetRuin = null;
-    private static int turnsWithoutProgress = 0;
 
-    // Early game defense - stay near towers for first N rounds
-    private static final int EARLY_GAME_THRESHOLD = 100;
+    // Thresholds (tune these during competition)
+    private static final int HEALTH_CRITICAL = 20;
+    private static final int PAINT_LOW = 50;
+    private static final int WEAK_ENEMY_HEALTH = 40;
+    private static final int EARLY_GAME_ROUNDS = 100;
 
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
 
-        // ========== PHASE 6: Check for urgent messages ==========
+        // ===== PRIORITY 0: SURVIVAL =====
+        if (rc.getHealth() < HEALTH_CRITICAL) {
+            retreat(rc);
+            return;
+        }
+
+        // ===== PRIORITY 1: CRITICAL ALERTS (from communication) =====
         MapLocation alertedTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_DANGER);
         if (alertedTower != null) {
-            // Rush to defend the alerted paint tower
-            rc.setIndicatorString("Responding to PAINT TOWER DANGER!");
+            rc.setIndicatorString("P1: Responding to tower alert!");
             Navigation.moveTo(rc, alertedTower);
             Utils.tryPaintCurrent(rc);
             return;
         }
 
-        // ========== PHASE 1: CRITICAL - Defend Paint Towers ==========
-        RobotInfo paintTowerUnderAttack = Utils.findPaintTowerUnderAttack(rc);
-        if (paintTowerUnderAttack != null) {
-            defendPaintTower(rc, paintTowerUnderAttack);
+        // ===== PRIORITY 2: DEFEND PAINT TOWERS =====
+        RobotInfo towerUnderAttack = Utils.findPaintTowerUnderAttack(rc);
+        if (towerUnderAttack != null) {
+            defendPaintTower(rc, towerUnderAttack);
             return;
         }
 
-        // ========== Check paint level - retreat if low ==========
-        if (rc.getPaint() < 50) {
+        // ===== PRIORITY 3: RESUPPLY =====
+        if (rc.getPaint() < PAINT_LOW) {
             retreatForPaint(rc);
             return;
         }
 
-        // ========== PHASE 6: Check for rush alert ==========
-        boolean rushAlerted = Comms.hasMessageOfType(rc, Comms.MessageType.RUSH_ALERT);
+        // ===== PRIORITY 4: OPPORTUNISTIC KILLS =====
+        RobotInfo weakEnemy = findWeakEnemy(rc);
+        if (weakEnemy != null && canKill(rc, weakEnemy)) {
+            rc.setIndicatorString("P4: Finishing weak enemy!");
+            if (rc.canAttack(weakEnemy.getLocation())) {
+                rc.attack(weakEnemy.getLocation());
+            }
+            Navigation.moveTo(rc, weakEnemy.getLocation());
+            return;
+        }
 
-        // ========== PHASE 2: Early game - stay near base ==========
-        if (round < EARLY_GAME_THRESHOLD || rushAlerted) {
-            // Check for nearby enemies (rush detection)
+        // ===== PRIORITY 5: EARLY GAME / RUSH DEFENSE =====
+        boolean rushAlert = Comms.hasMessageOfType(rc, Comms.MessageType.RUSH_ALERT);
+        if (round < EARLY_GAME_ROUNDS || rushAlert) {
             RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
             if (enemies.length > 0) {
-                // Fight nearby enemies
-                RobotInfo target = Utils.closestRobot(myLoc, enemies);
-                if (target != null) {
-                    engageEnemy(rc, target);
-                    return;
-                }
+                rc.setIndicatorString("P5: Early game defense!");
+                engageEnemy(rc, Utils.closestRobot(myLoc, enemies));
+                return;
             }
-
-            // Stay somewhat close to ally towers in early game
+            // Stay near base
             RobotInfo nearestTower = Utils.findNearestPaintTower(rc);
-            if (nearestTower != null) {
-                int distToTower = myLoc.distanceSquaredTo(nearestTower.getLocation());
-                // If too far from tower, move back
-                if (distToTower > 100) { // ~10 tiles
-                    Navigation.moveTo(rc, nearestTower.getLocation());
-                    Utils.tryPaintCurrent(rc);
-                    rc.setIndicatorString("Early game: staying near base");
-                    return;
-                }
+            if (nearestTower != null && myLoc.distanceSquaredTo(nearestTower.getLocation()) > 100) {
+                Navigation.moveTo(rc, nearestTower.getLocation());
+                Utils.tryPaintCurrent(rc);
+                return;
             }
         }
 
-        // ========== Normal behavior: Build towers ==========
+        // ===== PRIORITY 6: TOWER BUILDING =====
         MapLocation[] ruins = rc.senseNearbyRuins(-1);
         MapLocation bestRuin = findBuildableRuin(rc, ruins);
-
         if (bestRuin != null) {
             targetRuin = bestRuin;
-            turnsWithoutProgress = 0;
             handleTowerBuilding(rc, bestRuin);
             return;
         }
 
-        // ========== Attack nearby enemies ==========
+        // ===== PRIORITY 7: COMBAT =====
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         if (enemies.length > 0) {
             RobotInfo target = Utils.closestRobot(myLoc, enemies);
             if (target != null) {
-                // PHASE 6: Report enemy to nearby tower
                 Comms.reportEnemy(rc, target.getLocation(), enemies.length);
                 engageEnemy(rc, target);
                 return;
             }
         }
 
-        // ========== Paint and explore ==========
-        Utils.tryPaintCurrent(rc);
+        // ===== PRIORITY 8: DEFAULT - EXPLORE & PAINT =====
+        exploreAndPaint(rc);
+    }
 
-        MapLocation paintTarget = findUnpaintedTile(rc);
-        if (paintTarget != null) {
-            Navigation.moveTo(rc, paintTarget);
-        } else {
-            Utils.tryMoveRandom(rc);
+    // ==================== HELPER METHODS ====================
+
+    /**
+     * Find an enemy with low health that we can finish off.
+     */
+    private static RobotInfo findWeakEnemy(RobotController rc) throws GameActionException {
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        RobotInfo weakest = null;
+        int lowestHealth = WEAK_ENEMY_HEALTH + 1;
+
+        for (RobotInfo enemy : enemies) {
+            if (enemy.getHealth() < lowestHealth) {
+                lowestHealth = enemy.getHealth();
+                weakest = enemy;
+            }
         }
-
-        Utils.tryPaintCurrent(rc);
-        rc.setIndicatorString("Exploring");
+        return weakest;
     }
 
     /**
-     * PHASE 1: Defend a Paint Tower under attack.
+     * Check if we can kill this enemy this turn (in attack range).
+     */
+    private static boolean canKill(RobotController rc, RobotInfo enemy) throws GameActionException {
+        MapLocation myLoc = rc.getLocation();
+        int dist = myLoc.distanceSquaredTo(enemy.getLocation());
+        // Soldier attack range is 9 (action radius)
+        return dist <= rc.getType().actionRadiusSquared && rc.canAttack(enemy.getLocation());
+    }
+
+    /**
+     * Emergency retreat when health is critical.
+     */
+    private static void retreat(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("P0: CRITICAL HEALTH - RETREATING!");
+
+        // Find nearest ally tower
+        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+        for (RobotInfo ally : allies) {
+            if (ally.getType().isTowerType()) {
+                Navigation.moveTo(rc, ally.getLocation());
+                return;
+            }
+        }
+
+        // Move away from enemies
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        if (enemies.length > 0) {
+            MapLocation myLoc = rc.getLocation();
+            Direction awayFromEnemy = enemies[0].getLocation().directionTo(myLoc);
+            if (rc.canMove(awayFromEnemy)) {
+                rc.move(awayFromEnemy);
+            }
+        } else {
+            Utils.tryMoveRandom(rc);
+        }
+    }
+
+    /**
+     * Defend a Paint Tower under attack.
      */
     private static void defendPaintTower(RobotController rc, RobotInfo paintTower) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         MapLocation towerLoc = paintTower.getLocation();
 
-        rc.setIndicatorString("DEFENDING PAINT TOWER!");
+        rc.setIndicatorString("P2: DEFENDING PAINT TOWER!");
         rc.setIndicatorLine(myLoc, towerLoc, 255, 0, 0);
 
-        // Find enemies near the paint tower
+        // Find closest enemy to the tower
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         RobotInfo threat = null;
-        int closestToTower = Integer.MAX_VALUE;
+        int closestDist = Integer.MAX_VALUE;
 
         for (RobotInfo enemy : enemies) {
             int dist = towerLoc.distanceSquaredTo(enemy.getLocation());
-            if (dist < closestToTower) {
-                closestToTower = dist;
+            if (dist < closestDist) {
+                closestDist = dist;
                 threat = enemy;
             }
         }
 
         if (threat != null) {
-            // Attack the threat if in range
             if (rc.canAttack(threat.getLocation())) {
                 rc.attack(threat.getLocation());
             }
-            // Move toward the threat
             Navigation.moveTo(rc, threat.getLocation());
         } else {
-            // Move toward the paint tower
             Navigation.moveTo(rc, towerLoc);
         }
 
@@ -154,34 +196,31 @@ public class Soldier {
     }
 
     /**
-     * Engage an enemy: attack if possible, close distance if needed.
+     * Engage an enemy with paint-aware movement.
      */
     private static void engageEnemy(RobotController rc, RobotInfo enemy) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         MapLocation enemyLoc = enemy.getLocation();
 
-        rc.setIndicatorString("Engaging enemy at " + enemyLoc);
+        rc.setIndicatorString("P7: Engaging " + enemy.getType());
         rc.setIndicatorLine(myLoc, enemyLoc, 255, 128, 0);
 
-        // Attack if in range
         if (rc.canAttack(enemyLoc)) {
             rc.attack(enemyLoc);
         }
 
-        // Move toward enemy (but stay on paint if possible)
-        // PHASE 3: Try to stay on painted tiles while fighting
+        // Move toward enemy, prefer painted tiles
         Direction toEnemy = myLoc.directionTo(enemyLoc);
+        Direction[] tryDirs = {toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight()};
+
         MapLocation bestMove = null;
         int bestScore = Integer.MIN_VALUE;
 
-        // Check direct and adjacent directions
-        Direction[] tryDirs = {toEnemy, toEnemy.rotateLeft(), toEnemy.rotateRight()};
         for (Direction dir : tryDirs) {
             if (rc.canMove(dir)) {
                 MapLocation newLoc = myLoc.add(dir);
                 int score = Utils.scoreTile(rc, newLoc);
-                // Bonus for getting closer to enemy
-                score += 20 - myLoc.add(dir).distanceSquaredTo(enemyLoc);
+                score += 20 - newLoc.distanceSquaredTo(enemyLoc); // Closer is better
                 if (score > bestScore) {
                     bestScore = score;
                     bestMove = newLoc;
@@ -197,7 +236,7 @@ public class Soldier {
     }
 
     /**
-     * Find a ruin we can build a tower on (not already occupied).
+     * Find a ruin without a tower.
      */
     private static MapLocation findBuildableRuin(RobotController rc, MapLocation[] ruins) throws GameActionException {
         if (ruins == null || ruins.length == 0) return null;
@@ -207,9 +246,8 @@ public class Soldier {
         int bestDist = Integer.MAX_VALUE;
 
         for (MapLocation ruin : ruins) {
-            // Check if ruin already has a tower
             RobotInfo robot = rc.senseRobotAtLocation(ruin);
-            if (robot != null) continue; // Already has tower
+            if (robot != null) continue;
 
             int dist = myLoc.distanceSquaredTo(ruin);
             if (dist < bestDist) {
@@ -222,28 +260,24 @@ public class Soldier {
     }
 
     /**
-     * Handle the tower building process at a ruin.
+     * Handle tower building at a ruin.
      */
     private static void handleTowerBuilding(RobotController rc, MapLocation ruin) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
-        int distToRuin = myLoc.distanceSquaredTo(ruin);
 
-        rc.setIndicatorString("Building tower at " + ruin);
+        rc.setIndicatorString("P6: Building tower at " + ruin);
         rc.setIndicatorLine(myLoc, ruin, 0, 255, 0);
 
-        // Move closer if needed
-        if (distToRuin > 2) {
+        if (myLoc.distanceSquaredTo(ruin) > 2) {
             Navigation.moveTo(rc, ruin);
             Utils.tryPaintCurrent(rc);
             return;
         }
 
-        // Try to mark the tower pattern
         if (rc.canMarkTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin)) {
             rc.markTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin);
         }
 
-        // Fill in the pattern
         MapInfo[] patternTiles = rc.senseNearbyMapInfos(ruin, 8);
         for (MapInfo tile : patternTiles) {
             PaintType mark = tile.getMark();
@@ -253,17 +287,33 @@ public class Soldier {
                 boolean secondary = (mark == PaintType.ALLY_SECONDARY);
                 if (rc.canAttack(tile.getMapLocation())) {
                     rc.attack(tile.getMapLocation(), secondary);
-                    return; // One attack per turn
+                    return;
                 }
             }
         }
 
-        // Try to complete the tower
         if (rc.canCompleteTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin)) {
             rc.completeTowerPattern(UnitType.LEVEL_ONE_PAINT_TOWER, ruin);
             rc.setTimelineMarker("Tower built!", 0, 255, 0);
             targetRuin = null;
         }
+    }
+
+    /**
+     * Default behavior: paint and explore.
+     */
+    private static void exploreAndPaint(RobotController rc) throws GameActionException {
+        Utils.tryPaintCurrent(rc);
+
+        MapLocation paintTarget = findUnpaintedTile(rc);
+        if (paintTarget != null) {
+            Navigation.moveTo(rc, paintTarget);
+        } else {
+            Utils.tryMoveRandom(rc);
+        }
+
+        Utils.tryPaintCurrent(rc);
+        rc.setIndicatorString("P8: Exploring");
     }
 
     /**
@@ -279,7 +329,6 @@ public class Soldier {
             if (!tile.isPassable()) continue;
 
             PaintType paint = tile.getPaint();
-            // Prioritize enemy paint, then neutral
             if (paint.isEnemy() || paint == PaintType.EMPTY) {
                 int dist = myLoc.distanceSquaredTo(tile.getMapLocation());
                 if (dist < bestDist) {
@@ -296,31 +345,24 @@ public class Soldier {
      * Retreat toward ally tower for paint refill.
      */
     private static void retreatForPaint(RobotController rc) throws GameActionException {
-        rc.setIndicatorString("LOW PAINT - retreating");
+        rc.setIndicatorString("P3: LOW PAINT - retreating");
 
-        // Find ally towers
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
-        MapLocation towerLoc = null;
-
         for (RobotInfo ally : allies) {
             if (ally.getType().isTowerType()) {
-                towerLoc = ally.getLocation();
-                break;
+                Navigation.moveTo(rc, ally.getLocation());
+                return;
             }
         }
 
-        if (towerLoc != null) {
-            Navigation.moveTo(rc, towerLoc);
-        } else {
-            // Move toward painted ally territory
-            MapInfo[] tiles = rc.senseNearbyMapInfos();
-            for (MapInfo tile : tiles) {
-                if (tile.getPaint().isAlly()) {
-                    Navigation.moveTo(rc, tile.getMapLocation());
-                    return;
-                }
+        MapInfo[] tiles = rc.senseNearbyMapInfos();
+        for (MapInfo tile : tiles) {
+            if (tile.getPaint().isAlly()) {
+                Navigation.moveTo(rc, tile.getMapLocation());
+                return;
             }
-            Utils.tryMoveRandom(rc);
         }
+
+        Utils.tryMoveRandom(rc);
     }
 }

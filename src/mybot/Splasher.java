@@ -3,58 +3,85 @@ package mybot;
 import battlecode.common.*;
 
 /**
- * Splasher behavior: area-of-effect paint unit.
+ * Splasher behavior using Priority Chain Pattern.
  *
- * Priorities:
- * 1. Splash attack groups of enemies
- * 2. Paint large unpainted areas
- * 3. Contest enemy territory
+ * Priorities are processed in order - first match wins (early return).
+ * Splashers excel at: area paint attacks, territory control.
  */
 public class Splasher {
+
+    // Thresholds (tune these during competition)
+    private static final int HEALTH_CRITICAL = 30;
+    private static final int PAINT_LOW = 100;
+    private static final int SPLASH_HIGH_VALUE = 5;   // Great target
+    private static final int SPLASH_MEDIUM_VALUE = 3; // Worth attacking
 
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
 
-        // Check paint level - splashers use more paint
-        if (rc.getPaint() < 100) {
+        // ===== PRIORITY 0: SURVIVAL =====
+        if (rc.getHealth() < HEALTH_CRITICAL) {
+            retreat(rc);
+            return;
+        }
+
+        // ===== PRIORITY 1: RESUPPLY =====
+        if (rc.getPaint() < PAINT_LOW) {
             retreatForPaint(rc);
             return;
         }
 
-        // Find best splash target (maximize tiles painted)
+        // ===== PRIORITY 2: HIGH-VALUE SPLASH (5+ tiles) =====
         MapLocation splashTarget = findBestSplashTarget(rc);
-
         if (splashTarget != null) {
-            int dist = myLoc.distanceSquaredTo(splashTarget);
-
-            // In attack range?
-            if (rc.canAttack(splashTarget)) {
-                rc.attack(splashTarget);
-                rc.setIndicatorString("SPLASH! at " + splashTarget);
+            int score = scoreSplashLocation(rc, splashTarget);
+            if (score >= SPLASH_HIGH_VALUE) {
+                executeSplash(rc, splashTarget, score);
                 return;
             }
+        }
 
-            // Move toward target
-            Navigation.moveTo(rc, splashTarget);
-            rc.setIndicatorString("Moving to splash target");
+        // ===== PRIORITY 3: MEDIUM-VALUE SPLASH (3+ tiles) =====
+        if (splashTarget != null) {
+            int score = scoreSplashLocation(rc, splashTarget);
+            if (score >= SPLASH_MEDIUM_VALUE) {
+                executeSplash(rc, splashTarget, score);
+                return;
+            }
+        }
+
+        // ===== PRIORITY 4: ADVANCE TO ENEMY TERRITORY =====
+        MapLocation enemyTerritory = findEnemyTerritory(rc);
+        if (enemyTerritory != null) {
+            rc.setIndicatorString("P4: Advancing to enemy territory");
+            Navigation.moveTo(rc, enemyTerritory);
             return;
         }
 
-        // Explore toward enemy territory
-        MapLocation enemyArea = findEnemyTerritory(rc);
-        if (enemyArea != null) {
-            Navigation.moveTo(rc, enemyArea);
-            rc.setIndicatorString("Advancing to enemy territory");
-            return;
-        }
+        // ===== PRIORITY 5: DEFAULT - EXPLORE =====
+        explore(rc);
+    }
 
-        // Default: explore
-        Utils.tryMoveRandom(rc);
-        rc.setIndicatorString("Exploring");
+    // ==================== HELPER METHODS ====================
+
+    /**
+     * Execute a splash attack at target location.
+     */
+    private static void executeSplash(RobotController rc, MapLocation target, int score) throws GameActionException {
+        MapLocation myLoc = rc.getLocation();
+
+        if (rc.canAttack(target)) {
+            rc.attack(target);
+            rc.setIndicatorString("P2/3: SPLASH! Score=" + score);
+            rc.setIndicatorDot(target, 0, 255, 255);
+        } else {
+            rc.setIndicatorString("P2/3: Moving to splash target");
+            Navigation.moveTo(rc, target);
+        }
     }
 
     /**
-     * Find the best location to splash (maximize unpainted/enemy tiles hit).
+     * Find the best location to splash (maximize value).
      */
     private static MapLocation findBestSplashTarget(RobotController rc) throws GameActionException {
         MapInfo[] tiles = rc.senseNearbyMapInfos();
@@ -63,17 +90,15 @@ public class Splasher {
         MapLocation best = null;
         int bestScore = 0;
 
-        // Check each tile as potential splash center
         for (MapInfo tile : tiles) {
             if (!tile.isPassable()) continue;
 
             MapLocation loc = tile.getMapLocation();
             int dist = myLoc.distanceSquaredTo(loc);
 
-            // Must be in attack range
-            if (dist > rc.getType().actionRadiusSquared) continue;
+            // Must be in or near attack range
+            if (dist > rc.getType().actionRadiusSquared + 4) continue;
 
-            // Score based on nearby unpainted/enemy tiles
             int score = scoreSplashLocation(rc, loc);
             if (score > bestScore) {
                 bestScore = score;
@@ -81,12 +106,12 @@ public class Splasher {
             }
         }
 
-        // Only return if worth splashing (at least 3 tiles benefit)
-        return bestScore >= 3 ? best : null;
+        return best;
     }
 
     /**
-     * Score a location for splash attack (how many tiles would benefit).
+     * Score a location for splash attack.
+     * Enemy paint = 2 points, neutral = 1 point.
      */
     private static int scoreSplashLocation(RobotController rc, MapLocation center) throws GameActionException {
         int score = 0;
@@ -102,7 +127,7 @@ public class Splasher {
 
                 PaintType paint = info.getPaint();
                 if (paint.isEnemy()) {
-                    score += 2; // Enemy paint worth more
+                    score += 2;
                 } else if (paint == PaintType.EMPTY) {
                     score += 1;
                 }
@@ -135,10 +160,10 @@ public class Splasher {
     }
 
     /**
-     * Retreat for paint resupply.
+     * Emergency retreat when health is critical.
      */
-    private static void retreatForPaint(RobotController rc) throws GameActionException {
-        rc.setIndicatorString("LOW PAINT - retreating");
+    private static void retreat(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("P0: CRITICAL HEALTH - RETREATING!");
 
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
         for (RobotInfo ally : allies) {
@@ -148,6 +173,48 @@ public class Splasher {
             }
         }
 
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        if (enemies.length > 0) {
+            MapLocation myLoc = rc.getLocation();
+            Direction awayFromEnemy = enemies[0].getLocation().directionTo(myLoc);
+            if (rc.canMove(awayFromEnemy)) {
+                rc.move(awayFromEnemy);
+            }
+        } else {
+            Utils.tryMoveRandom(rc);
+        }
+    }
+
+    /**
+     * Retreat for paint resupply.
+     */
+    private static void retreatForPaint(RobotController rc) throws GameActionException {
+        rc.setIndicatorString("P1: LOW PAINT - retreating");
+
+        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+        for (RobotInfo ally : allies) {
+            if (ally.getType().isTowerType()) {
+                Navigation.moveTo(rc, ally.getLocation());
+                return;
+            }
+        }
+
+        MapInfo[] tiles = rc.senseNearbyMapInfos();
+        for (MapInfo tile : tiles) {
+            if (tile.getPaint().isAlly()) {
+                Navigation.moveTo(rc, tile.getMapLocation());
+                return;
+            }
+        }
+
         Utils.tryMoveRandom(rc);
+    }
+
+    /**
+     * Default exploration behavior.
+     */
+    private static void explore(RobotController rc) throws GameActionException {
+        Utils.tryMoveRandom(rc);
+        rc.setIndicatorString("P5: Exploring");
     }
 }
