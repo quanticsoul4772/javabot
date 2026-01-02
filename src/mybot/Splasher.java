@@ -77,6 +77,7 @@ public class Splasher {
             int dist = myLoc.distanceSquaredTo(attackTarget);
             if (dist <= 100) {  // Within 10 tiles
                 Metrics.trackSplasherPriority(1);
+                Metrics.trackMessageActedOn();
                 rc.setIndicatorString("P1: FOCUS FIRE!");
                 rc.setIndicatorLine(myLoc, attackTarget, 255, 0, 255);
 
@@ -104,6 +105,7 @@ public class Splasher {
             // Only respond if reasonably close (within 100 tiles squared)
             if (dist <= 100) {
                 Metrics.trackSplasherPriority(2);  // Counts as high-value
+                Metrics.trackMessageActedOn();
                 rc.setIndicatorString("P1.5: Supporting tower build at " + towerSite);
                 rc.setIndicatorLine(myLoc, towerSite, 0, 255, 0);
                 if (dist <= rc.getType().actionRadiusSquared && rc.canAttack(towerSite)) {
@@ -182,6 +184,9 @@ public class Splasher {
 
         // PAINT CONSERVATION: Move to ally paint before splashing if possible
         MapInfo currentTile = rc.senseMapInfo(myLoc);
+
+        // Track combat paint metrics
+        Metrics.trackCombatTurn(currentTile.getPaint().isAlly());
         if (!currentTile.getPaint().isAlly() && rc.isMovementReady()) {
             for (Direction dir : Utils.DIRECTIONS) {
                 if (!rc.canMove(dir)) continue;

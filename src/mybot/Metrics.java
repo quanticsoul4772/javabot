@@ -48,6 +48,30 @@ public class Metrics {
     public static int mopSwings = 0;
     public static int retreatsTriggered = 0;   // Times we retreated
 
+    // ==================== UNIT LIFECYCLE ====================
+    // 0=soldier, 1=splasher, 2=mopper, 3=tower
+    public static int[] unitSpawned = new int[4];
+    public static int[] unitDeaths = new int[4];
+    public static int[] totalSurvivalTurns = new int[4];
+
+    // ==================== PAINT COVERAGE ====================
+    public static int allyPaintTiles = 0;
+    public static int enemyPaintTiles = 0;
+    public static int neutralPaintTiles = 0;
+
+    // ==================== PAINT CONSERVATION ====================
+    public static int combatTurnsOnAllyPaint = 0;
+    public static int combatTurnsTotal = 0;
+
+    // ==================== ECONOMY ====================
+    public static int paintTowersBuilt = 0;
+    public static int moneyTowersBuilt = 0;
+    public static int defenseTowersBuilt = 0;
+
+    // ==================== COMMUNICATION ====================
+    public static int messagesSent = 0;
+    public static int messagesActedOn = 0;
+
     // ==================== HELPER METHODS ====================
 
     public static void trackSoldierPriority(int priority) {
@@ -130,6 +154,62 @@ public class Metrics {
         if (ENABLED) ruinsDenied++;
     }
 
+    // ==================== NEW TRACKING METHODS ====================
+
+    /**
+     * Track unit spawn. Type: 0=soldier, 1=splasher, 2=mopper, 3=tower
+     */
+    public static void trackSpawn(int unitType) {
+        if (ENABLED && unitType >= 0 && unitType < 4) {
+            unitSpawned[unitType]++;
+        }
+    }
+
+    /**
+     * Track unit death with survival time.
+     */
+    public static void trackDeath(int unitType, int survivalTurns) {
+        if (ENABLED && unitType >= 0 && unitType < 4) {
+            unitDeaths[unitType]++;
+            totalSurvivalTurns[unitType] += survivalTurns;
+        }
+    }
+
+    /**
+     * Track paint coverage sample from visible tiles.
+     */
+    public static void trackPaintSample(int ally, int enemy, int neutral) {
+        if (ENABLED) {
+            allyPaintTiles += ally;
+            enemyPaintTiles += enemy;
+            neutralPaintTiles += neutral;
+        }
+    }
+
+    /**
+     * Track combat turn - whether unit is on ally paint.
+     */
+    public static void trackCombatTurn(boolean onAllyPaint) {
+        if (ENABLED) {
+            combatTurnsTotal++;
+            if (onAllyPaint) combatTurnsOnAllyPaint++;
+        }
+    }
+
+    /**
+     * Track message sent.
+     */
+    public static void trackMessageSent() {
+        if (ENABLED) messagesSent++;
+    }
+
+    /**
+     * Track message acted upon.
+     */
+    public static void trackMessageActedOn() {
+        if (ENABLED) messagesActedOn++;
+    }
+
     // ==================== PER-UNIT REPORTING ====================
     // Note: In Battlecode, static state is NOT shared between robots.
     // Each robot has its own Metrics instance. These functions let each
@@ -176,5 +256,40 @@ public class Metrics {
         System.out.println("[MOPPER #" + robotId + " r" + round + "] " +
             "P2=" + mopperPriority[2] + " P4=" + mopperPriority[4] +
             " mops=" + mopSwings);
+    }
+
+    // ==================== GAME SUMMARY REPORTING ====================
+
+    /**
+     * Report comprehensive game metrics (call from Tower every 100 rounds).
+     */
+    public static void reportGameSummary(int round) {
+        if (!ENABLED) return;
+
+        // Paint coverage
+        int totalTiles = allyPaintTiles + enemyPaintTiles + neutralPaintTiles;
+        int allyPct = totalTiles > 0 ? allyPaintTiles * 100 / totalTiles : 0;
+        int enemyPct = totalTiles > 0 ? enemyPaintTiles * 100 / totalTiles : 0;
+
+        // Survival times (average)
+        int soldierSurvival = unitDeaths[0] > 0 ? totalSurvivalTurns[0] / unitDeaths[0] : 0;
+        int splasherSurvival = unitDeaths[1] > 0 ? totalSurvivalTurns[1] / unitDeaths[1] : 0;
+
+        // Paint conservation
+        int conservationPct = combatTurnsTotal > 0 ?
+            combatTurnsOnAllyPaint * 100 / combatTurnsTotal : 100;
+
+        // Tower success rate
+        int towerSuccessPct = towerAttempts > 0 ? towersBuilt * 100 / towerAttempts : 0;
+
+        // Message effectiveness
+        int msgEffectPct = messagesSent > 0 ? messagesActedOn * 100 / messagesSent : 0;
+
+        System.out.println("[GAME r" + round + "] " +
+            "Paint=" + allyPct + "%/" + enemyPct + "% " +
+            "Survival=" + soldierSurvival + "/" + splasherSurvival + " " +
+            "PaintConserv=" + conservationPct + "% " +
+            "TowerSuccess=" + towerSuccessPct + "% " +
+            "MsgEffect=" + msgEffectPct + "%");
     }
 }

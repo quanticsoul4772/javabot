@@ -73,6 +73,7 @@ public class Mopper {
             int dist = myLoc.distanceSquaredTo(attackTarget);
             if (dist <= 100) {  // Within 10 tiles
                 Metrics.trackMopperPriority(1);
+                Metrics.trackMessageActedOn();
                 rc.setIndicatorString("P1: FOCUS FIRE!");
                 rc.setIndicatorLine(myLoc, attackTarget, 255, 0, 255);
 
@@ -96,6 +97,7 @@ public class Mopper {
             int dist = myLoc.distanceSquaredTo(threatenedSplasher);
             if (dist <= 64) {  // Within 8 tiles
                 Metrics.trackMopperPriority(1);
+                Metrics.trackMessageActedOn();
                 rc.setIndicatorString("P1.5: Protecting splasher!");
                 rc.setIndicatorLine(myLoc, threatenedSplasher, 0, 255, 0);
 
@@ -166,6 +168,10 @@ public class Mopper {
         RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
 
         if (enemies.length == 0) return false;
+
+        // Track combat paint metrics
+        MapInfo currentTile = rc.senseMapInfo(myLoc);
+        Metrics.trackCombatTurn(currentTile.getPaint().isAlly());
 
         // Find best direction to swing (hits most enemies)
         Direction bestDir = null;

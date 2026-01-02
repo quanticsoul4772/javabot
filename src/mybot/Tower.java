@@ -36,6 +36,11 @@ public class Tower {
         // ===== PRIORITY 0: ECONOMY UPDATE =====
         Utils.updateIncomeEstimate(rc);
 
+        // ===== PRIORITY 0.5: PAINT SAMPLING (every 50 rounds) =====
+        if (round % 50 == 0) {
+            samplePaintCoverage(rc);
+        }
+
         // ===== PRIORITY 1: COMMUNICATION (read messages) =====
         processMessages(rc);
 
@@ -371,9 +376,18 @@ public class Tower {
      */
     private static void trackSpawn(UnitType type) {
         switch (type) {
-            case SOLDIER: soldiersSpawned++; break;
-            case MOPPER: moppersSpawned++; break;
-            case SPLASHER: splashersSpawned++; break;
+            case SOLDIER:
+                soldiersSpawned++;
+                Metrics.trackSpawn(0);
+                break;
+            case MOPPER:
+                moppersSpawned++;
+                Metrics.trackSpawn(2);
+                break;
+            case SPLASHER:
+                splashersSpawned++;
+                Metrics.trackSpawn(1);
+                break;
             default: break;
         }
     }
@@ -384,6 +398,24 @@ public class Tower {
     private static void processMessages(RobotController rc) throws GameActionException {
         Message[] messages = rc.readMessages(-1);
         // Future: use messages for coordination
+    }
+
+    /**
+     * Sample visible paint tiles for coverage metrics.
+     */
+    private static void samplePaintCoverage(RobotController rc) throws GameActionException {
+        MapInfo[] tiles = rc.senseNearbyMapInfos();
+        int ally = 0, enemy = 0, neutral = 0;
+
+        for (MapInfo tile : tiles) {
+            if (!tile.isPassable()) continue;
+            PaintType paint = tile.getPaint();
+            if (paint.isAlly()) ally++;
+            else if (paint.isEnemy()) enemy++;
+            else neutral++;
+        }
+
+        Metrics.trackPaintSample(ally, enemy, neutral);
     }
 
     /**
@@ -406,6 +438,11 @@ public class Tower {
                 "spawned: soldiers=" + soldiersSpawned +
                 " moppers=" + moppersSpawned +
                 " splashers=" + splashersSpawned);
+        }
+
+        // Game summary metrics every 100 rounds
+        if (round % 100 == 0) {
+            Metrics.reportGameSummary(round);
         }
     }
 }

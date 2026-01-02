@@ -109,6 +109,7 @@ public class Comms {
 
         int msg = encode(type, aboutLoc, payload);
         rc.sendMessage(target, msg);
+        Metrics.trackMessageSent();
         return true;
     }
 
@@ -228,6 +229,7 @@ public class Comms {
             if (!ally.getType().isTowerType() && rc.canSendMessage(ally.getLocation())) {
                 int msg = encode(MessageType.ATTACK_TARGET, target, 0);
                 rc.sendMessage(ally.getLocation(), msg);
+                Metrics.trackMessageSent();
                 break;  // Units can only send 1 msg/turn
             }
         }

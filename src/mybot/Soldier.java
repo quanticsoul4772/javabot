@@ -103,6 +103,7 @@ public class Soldier {
             int dist = myLoc.distanceSquaredTo(attackTarget);
             if (dist <= 100) {  // Within 10 tiles
                 Metrics.trackSoldierPriority(1);
+                Metrics.trackMessageActedOn();
                 rc.setIndicatorString("P1: FOCUS FIRE!");
                 rc.setIndicatorLine(myLoc, attackTarget, 255, 0, 255);
 
@@ -119,6 +120,7 @@ public class Soldier {
         MapLocation alertedTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_DANGER);
         if (alertedTower != null) {
             Metrics.trackSoldierPriority(1);
+            Metrics.trackMessageActedOn();
             rc.setIndicatorString("P1: Responding to tower alert!");
             Navigation.moveTo(rc, alertedTower);
             Utils.tryPaintCurrent(rc);
@@ -360,6 +362,9 @@ public class Soldier {
 
         // PAINT CONSERVATION: Move to ally paint before attacking if possible
         MapInfo currentTile = rc.senseMapInfo(myLoc);
+
+        // Track combat paint metrics
+        Metrics.trackCombatTurn(currentTile.getPaint().isAlly());
         if (!currentTile.getPaint().isAlly() && rc.isMovementReady()) {
             // Find adjacent ally-painted tile still in attack range
             for (Direction dir : Utils.DIRECTIONS) {
