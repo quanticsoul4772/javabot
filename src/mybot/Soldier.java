@@ -470,17 +470,24 @@ public class Soldier {
 
         if (totalVisible > 0) {
             // We can see towers - make informed decision
+            // Priority: Defense when under attack
             if (underAttack && defenseTowers == 0) {
                 return UnitType.LEVEL_ONE_DEFENSE_TOWER;
             }
 
-            // Target ratio: 2 money : 1 paint : 0-1 defense
+            // Target ratio: 2 money : 1 paint : 1 defense
+            // Build defense tower if we have none and have at least 1 money tower
+            if (defenseTowers == 0 && moneyTowers >= 1) {
+                return UnitType.LEVEL_ONE_DEFENSE_TOWER;
+            }
+
             // Money towers are crucial for economy!
             if (moneyTowers < paintTowers * 2) {
                 return UnitType.LEVEL_ONE_MONEY_TOWER;
             }
 
-            if (round > 500 && defenseTowers < 2) {
+            // Keep defense towers proportional
+            if (defenseTowers < moneyTowers / 2) {
                 return UnitType.LEVEL_ONE_DEFENSE_TOWER;
             }
 
@@ -492,23 +499,23 @@ public class Soldier {
         }
 
         // No towers visible - use ROUND-BASED cycling for determinism
-        // All soldiers in same round range build same type = coordination
         // Early game: Paint tower for survival
         if (round < 150) {
             return UnitType.LEVEL_ONE_PAINT_TOWER;
         }
 
         // Use robot ID + round to create deterministic but varied selection
-        // This ensures different soldiers build different types
+        // Ratio: 2 Money : 1 Paint : 1 Defense (50% / 25% / 25%)
         int robotId = rc.getID();
-        int selector = (robotId + round / 50) % 3;
+        int selector = (robotId + round / 50) % 4;
 
-        // 2:1 Money:Paint ratio per "Money Is All You Need" strategy
         if (selector == 0 || selector == 1) {
-            return UnitType.LEVEL_ONE_MONEY_TOWER;  // 2/3 money towers
+            return UnitType.LEVEL_ONE_MONEY_TOWER;  // 50% money towers
+        } else if (selector == 2) {
+            return UnitType.LEVEL_ONE_DEFENSE_TOWER;  // 25% defense towers
         }
 
-        return UnitType.LEVEL_ONE_PAINT_TOWER;  // 1/3 paint towers
+        return UnitType.LEVEL_ONE_PAINT_TOWER;  // 25% paint towers
     }
 
     /**
