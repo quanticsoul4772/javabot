@@ -174,6 +174,7 @@ Units self-report every 500 rounds. View during match:
 javabot/
 ├── src/
 │   ├── mybot/              # Main bot implementation
+│   ├── spaark2/            # SPAARK-inspired bot with advanced systems
 │   └── examplefuncsplayer/ # Reference implementation
 ├── test/                   # JUnit tests
 ├── client/                 # Battlecode client executable
@@ -183,6 +184,22 @@ javabot/
 ├── gradle.properties       # Default match configuration
 └── CLAUDE.md               # Development guidance
 ```
+
+## Alternative Bot: spaark2
+
+The `spaark2` package is a SPAARK-inspired bot with advanced coordination systems:
+
+- **POI System**: Global tower tracking beyond sensor range
+- **Micro System**: Paint-aware and threat-aware combat movement
+- **Spawn Coordination**: Debt-based unit spawning with dynamic weights
+- **Bytecode Optimized**: Backward loops, early exits, throttled scanning
+
+```bash
+# Test spaark2 against SPAARK
+./gradlew run -PteamA=spaark2 -PteamB=SPAARK -Pmaps=DefaultSmall
+```
+
+See [src/spaark2/README.md](src/spaark2/README.md) for full documentation.
 
 ## Configuration
 
