@@ -19,18 +19,14 @@ public class POI {
     public static int allyMoneyTowers = 0;
     public static int allyDefenseTowers = 0;
 
-    // Map dimensions (set once on init)
-    private static int mapWidth = 0;
-    private static int mapHeight = 0;
+    // Initialization flag
+    private static boolean initialized = false;
 
     /**
      * Initialize POI system for a robot.
      */
     public static void init(RobotController rc) {
-        if (mapWidth == 0) {
-            mapWidth = rc.getMapWidth();
-            mapHeight = rc.getMapHeight();
-        }
+        initialized = true;
     }
 
     /**
@@ -102,25 +98,6 @@ public class POI {
     }
 
     /**
-     * Find nearest ally tower of any type.
-     */
-    public static MapLocation findNearestAllyTower(MapLocation from, Team myTeam) {
-        MapLocation best = null;
-        int bestDist = Integer.MAX_VALUE;
-
-        for (int i = numberOfTowers; --i >= 0;) {
-            if (towerTeams[i] == myTeam) {
-                int dist = from.distanceSquaredTo(towerLocs[i]);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = towerLocs[i];
-                }
-            }
-        }
-        return best;
-    }
-
-    /**
      * Find nearest ally paint tower for retreating.
      */
     public static MapLocation findNearestAllyPaintTower(MapLocation from, Team myTeam) {
@@ -129,26 +106,6 @@ public class POI {
 
         for (int i = numberOfTowers; --i >= 0;) {
             if (towerTeams[i] == myTeam && isPaintTower(towerTypes[i])) {
-                int dist = from.distanceSquaredTo(towerLocs[i]);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = towerLocs[i];
-                }
-            }
-        }
-        return best;
-    }
-
-    /**
-     * Find nearest enemy tower for attacking.
-     */
-    public static MapLocation findNearestEnemyTower(MapLocation from, Team myTeam) {
-        MapLocation best = null;
-        int bestDist = Integer.MAX_VALUE;
-        Team enemy = myTeam.opponent();
-
-        for (int i = numberOfTowers; --i >= 0;) {
-            if (towerTeams[i] == enemy) {
                 int dist = from.distanceSquaredTo(towerLocs[i]);
                 if (dist < bestDist) {
                     bestDist = dist;

@@ -13,12 +13,9 @@ public class Micro {
 
     // Scoring constants
     public static final int ENEMY_PAINT_PENALTY = 25;
-    public static final int NEUTRAL_PAINT_PENALTY = 5;
     public static final int ALLY_PAINT_BONUS = 10;
     public static final int ENEMY_THREAT_PENALTY = 50;
     public static final int TARGET_DIRECTION_BONUS = 20;
-    public static final int ADJACENT_BONUS = 15;
-    public static final int DEATH_PENALTY = 1000;
 
     /**
      * Calculate movement scores for all 9 directions.
@@ -96,46 +93,10 @@ public class Micro {
     }
 
     /**
-     * Get estimated attack damage for a unit type.
-     */
-    private static int getAttackDamage(UnitType type) {
-        switch (type) {
-            case SOLDIER:
-                return 10;
-            case SPLASHER:
-                return 5;
-            case MOPPER:
-                return 5;
-            case LEVEL_ONE_PAINT_TOWER:
-            case LEVEL_ONE_MONEY_TOWER:
-            case LEVEL_ONE_DEFENSE_TOWER:
-                return 10;
-            case LEVEL_TWO_PAINT_TOWER:
-            case LEVEL_TWO_MONEY_TOWER:
-            case LEVEL_TWO_DEFENSE_TOWER:
-                return 15;
-            case LEVEL_THREE_PAINT_TOWER:
-            case LEVEL_THREE_MONEY_TOWER:
-            case LEVEL_THREE_DEFENSE_TOWER:
-                return 25;
-            default:
-                return 10;
-        }
-    }
-
-    /**
-     * Check if there are any enemy threats nearby.
-     */
-    public static boolean hasThreats(RobotController rc) throws GameActionException {
-        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
-        return enemies.length > 0;
-    }
-
-    /**
      * Check if we should kite (stay at range and attack).
      * Returns true if we have high enough health to engage.
      */
-    public static boolean shouldEngage(RobotController rc) throws GameActionException {
+    public static boolean shouldEngage(RobotController rc) {
         int health = rc.getHealth();
         int maxHealth = rc.getType().health;
         int paint = rc.getPaint();

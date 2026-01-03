@@ -241,28 +241,4 @@ public class Tower {
             default: return 1000;
         }
     }
-
-
-    private static int countAllyTowers(RobotController rc) throws GameActionException {
-        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
-        int count = 0;
-        for (int i = allies.length; --i >= 0;) {
-            if (allies[i].getType().isTowerType()) count++;
-        }
-        return count;
-    }
-
-    private static int countPaintTowers(RobotController rc) throws GameActionException {
-        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
-        int count = 0;
-        for (int i = allies.length; --i >= 0;) {
-            UnitType type = allies[i].getType();
-            if (type == UnitType.LEVEL_ONE_PAINT_TOWER ||
-                type == UnitType.LEVEL_TWO_PAINT_TOWER ||
-                type == UnitType.LEVEL_THREE_PAINT_TOWER) {
-                count++;
-            }
-        }
-        return count;
-    }
 }

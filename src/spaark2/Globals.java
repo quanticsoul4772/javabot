@@ -22,15 +22,6 @@ public class Globals {
     public static final int RETREAT_CHIPS = 6000;
     public static final int RETREAT_ALLIES = 9;
 
-    // Tower building limits (from SPAARK)
-    public static final int MAX_TOWER_ENEMY_PAINT = 4;
-    public static final int MAX_BUILDING_SOLDIERS = 2;
-    public static final int TOWER_TIMEOUT = 80;
-
-    // SRP (Special Resource Pattern) timing
-    public static final int SRP_MIN_ROUND = 50;
-    public static final int SRP_TIMEOUT = 50;
-
     // Unit costs
     public static final int SOLDIER_PAINT_COST = 200;
     public static final int MOPPER_PAINT_COST = 100;
