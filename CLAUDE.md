@@ -38,6 +38,33 @@ RobotPlayer.java  ← Entry point, dispatches to unit handlers by type
 └── Metrics.java  ← Lightweight metrics collection (toggle with ENABLED flag)
 ```
 
+### Bot Package: `spaark2`
+
+SPAARK-inspired bot with advanced coordination systems.
+
+```
+RobotPlayer.java  ← Entry point, dispatches to unit handlers by type
+├── Soldier.java  ← Mode-based state machine (EXPLORE, BUILD_TOWER, RETREAT)
+├── Mopper.java   ← Support: swing attack, mop paint, transfer resources
+├── Splasher.java ← Territory control with splash scoring
+├── Tower.java    ← Debt-based spawn coordination
+├── Nav.java      ← Bug2 pathfinding with micro integration
+├── Micro.java    ← Combat movement scoring (paint + threat aware)
+├── POI.java      ← Global tower tracking (Points of Interest)
+└── Globals.java  ← Shared constants and spawn tracking
+```
+
+**spaark2 Key Systems:**
+- **POI System**: Tracks towers beyond sensor range (up to 144 towers)
+- **Micro System**: Scores 9 directions for combat movement
+- **Spawn Coordination**: Debt-based spawning with dynamic weights
+- **Bytecode Optimized**: Backward loops, early exits, throttled scanning
+
+**Testing spaark2:**
+```bash
+./gradlew run -PteamA=spaark2 -PteamB=SPAARK -Pmaps=DefaultSmall
+```
+
 ### Key Constraints
 - **Bytecode limits**: 15,000/robot, 20,000/tower per turn
 - **Paint Towers are critical**: Losing all Paint Towers = no paint = death spiral
