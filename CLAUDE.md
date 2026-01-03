@@ -1,13 +1,13 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Development guidance for MIT Battlecode 2025 bots.
 
 ## Build Commands
 
 ```bash
 ./gradlew build                    # Compile all players
 ./gradlew run                      # Run match with gradle.properties settings
-./gradlew run -PteamA=mybot -PteamB=examplefuncsplayer -Pmaps=DefaultSmall
+./gradlew run -PteamA=spaark2 -PteamB=SPAARK -Pmaps=DefaultSmall
 ./gradlew test                     # Run JUnit tests
 ./gradlew listPlayers              # Show available bot packages
 ./gradlew listMaps                 # Show available maps
@@ -16,112 +16,63 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 
 **Windows Note**: Requires JAVA_HOME set to Java 21.
-- JAVA_HOME is configured at: `C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot`
-- If builds fail with "JAVA_HOME not set", run: `setx JAVA_HOME "C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"`
+- JAVA_HOME: `C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot`
 
-## Architecture
+## Game Overview
 
-This is a **MIT Battlecode 2025** bot. Win condition: paint 70%+ of the map.
+Win condition: paint 70%+ of the map, or have most tiles painted at round 2000.
 
-### Bot Package: `mybot`
-
-```
-RobotPlayer.java  ← Entry point, dispatches to unit handlers by type
-├── Soldier.java  ← Combat unit: attacks, builds towers, paints empty tiles
-├── Mopper.java   ← Utility: cleans enemy paint, mop swing AOE
-├── Splasher.java ← Territory control: ONLY unit that can paint over enemy paint
-├── Tower.java    ← Stationary: spawns units, attacks enemies
-├── Navigation.java ← Bug2 pathfinding with paint-aware scoring
-├── Utils.java    ← Shared helpers: RNG, directions, tower tracking
-├── Comms.java    ← 32-bit message encoding for robot communication
-├── Scoring.java  ← Centralized scoring weights for splash targets
-└── Metrics.java  ← Lightweight metrics collection (toggle with ENABLED flag)
-```
-
-### Bot Package: `spaark2`
-
-SPAARK-inspired bot with advanced coordination systems.
-
-```
-RobotPlayer.java  ← Entry point, dispatches to unit handlers by type
-├── Soldier.java  ← Mode-based state machine (EXPLORE, BUILD_TOWER, RETREAT)
-├── Mopper.java   ← Support: swing attack, mop paint, transfer resources
-├── Splasher.java ← Territory control with splash scoring
-├── Tower.java    ← Debt-based spawn coordination
-├── Nav.java      ← Bug2 pathfinding with micro integration
-├── Micro.java    ← Combat movement scoring (paint + threat aware)
-├── POI.java      ← Global tower tracking (Points of Interest)
-└── Globals.java  ← Shared constants and spawn tracking
-```
-
-**spaark2 Key Systems:**
-- **POI System**: Tracks towers beyond sensor range (up to 144 towers)
-- **Micro System**: Scores 9 directions for combat movement
-- **Spawn Coordination**: Debt-based spawning with dynamic weights
-- **Bytecode Optimized**: Backward loops, early exits, throttled scanning
-
-**Testing spaark2:**
-```bash
-./gradlew run -PteamA=spaark2 -PteamB=SPAARK -Pmaps=DefaultSmall
-```
+### Unit Types
+| Unit | Paint Ability | Role |
+|------|---------------|------|
+| Soldier | Empty tiles only | Expand territory, build towers, attack |
+| Splasher | Enemy + empty tiles | Contest enemy territory (critical!) |
+| Mopper | Remove enemy paint | Support, mop swing AOE |
 
 ### Key Constraints
 - **Bytecode limits**: 15,000/robot, 20,000/tower per turn
-- **Paint Towers are critical**: Losing all Paint Towers = no paint = death spiral
+- **Paint Towers are critical**: Losing all = no paint = death spiral
 - Units take damage on enemy paint, heal on ally paint
-- **Splashers are essential**: Only splashers can paint over enemy territory
 
-### Unit Roles
-| Unit | Paint Ability | Primary Role |
-|------|---------------|--------------|
-| Soldier | Empty tiles only | Expand territory, build towers |
-| Splasher | Enemy + empty tiles | Contest enemy territory (critical!) |
-| Mopper | Clean enemy paint | Support, mop swing AOE attack |
+## Bot Packages
 
-### Spawn Ratios (Tower.java)
-- **Early game** (0-300): 90% soldiers, 10% moppers
-- **Mid game** (300-600): 40% soldiers, 20% moppers, 40% splashers
-- **Late game** (600+): 30% soldiers, 20% moppers, 50% splashers
+Each bot is a separate package in `src/`. See each bot's README for details.
 
-### Message Format (Comms.java)
-32-bit encoding: `[4 bits: type][6 bits: x][6 bits: y][16 bits: payload]`
-
-### Navigation (Navigation.java)
-Bug2 algorithm with:
-- Paint-aware tile scoring (+10 ally, -5 enemy)
-- C-shape escape: switches left/right hand rule after 15 turns stuck
+| Package | Description |
+|---------|-------------|
+| `spaark2` | SPAARK-inspired with POI, Micro, debt-based spawning |
+| `mybot` | Legacy bot with priority chain pattern |
 
 ## Match Configuration
 
-Edit `gradle.properties` to change default matchups:
+Edit `gradle.properties`:
 ```properties
-teamA=mybot
-teamB=examplefuncsplayer
+teamA=spaark2
+teamB=SPAARK
 maps=DefaultSmall
 ```
 
 ## Viewing Matches
 
-Run client after building: `client/Battlecode Client.exe`
-Match replays saved to `matches/` directory.
+Run client: `client/Battlecode Client.exe`
+Replays saved to `matches/`.
 
-## Metrics System
+## Common Patterns
 
-Toggle metrics with `Metrics.ENABLED` in `Metrics.java`. When enabled:
-- Towers report spawns every 500 rounds
-- Units report priority usage every 500 rounds
+### Bytecode Optimization
+```java
+// Backward loops save ~2 bytecode per iteration
+for (int i = array.length; --i >= 0;) { }
 
-View metrics during match:
-```bash
-./gradlew run -PteamA=mybot -PteamB=mybot -Pmaps=DefaultSmall 2>&1 | grep -E "TOWER|SOLDIER|SPLASHER|MOPPER"
+// Early exit when match found
+if (condition) break;
+
+// Throttled operations (every N rounds)
+if (round - lastRound < 5) return;
 ```
 
-## Priority Chain Pattern
+### Navigation
+Most bots use Bug2 pathfinding with obstacle tracing.
 
-All units use a priority chain (if-else with early returns):
-- **P0**: Survival (critical health → retreat)
-- **P1**: Resupply (low paint → return to tower)
-- **P2-P7**: Unit-specific behaviors
-- **P8/P5**: Default exploration
-
-Higher priority = checked first. First matching condition wins.
+### Retreat Logic
+Units typically retreat when paint is low AND money is low.
