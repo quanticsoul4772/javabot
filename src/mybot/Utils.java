@@ -199,6 +199,16 @@ public class Utils {
     }
 
     /**
+     * Check if this is a Defense Tower type.
+     * Defense towers have paint (unlike Money towers which have 0).
+     */
+    public static boolean isDefenseTower(UnitType type) {
+        return type == UnitType.LEVEL_ONE_DEFENSE_TOWER ||
+               type == UnitType.LEVEL_TWO_DEFENSE_TOWER ||
+               type == UnitType.LEVEL_THREE_DEFENSE_TOWER;
+    }
+
+    /**
      * Count enemy soldiers visible (for rush detection).
      */
     public static int countEnemySoldiers(RobotController rc) throws GameActionException {

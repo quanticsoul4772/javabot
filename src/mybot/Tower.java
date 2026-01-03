@@ -36,6 +36,10 @@ public class Tower {
         // ===== PRIORITY 0: ECONOMY UPDATE =====
         Utils.updateIncomeEstimate(rc);
 
+        // ===== PRIORITY 0.25: REFILL ADJACENT LOW-PAINT UNITS =====
+        // This is CRITICAL - units with low paint can't move or act!
+        refillAdjacentUnits(rc);
+
         // ===== PRIORITY 0.5: PAINT SAMPLING (every 50 rounds) =====
         if (round % 50 == 0) {
             samplePaintCoverage(rc);
@@ -195,124 +199,108 @@ public class Tower {
         UnitType toSpawn = chooseUnitToSpawn(round, underThreat, panicMode, inRushMode, enemySplashers);
         if (toSpawn == null) return;
 
-        MapLocation spawnLoc = findSpawnLocation(rc, toSpawn, enemies);
-        if (spawnLoc != null && rc.canBuildRobot(toSpawn, spawnLoc)) {
-            rc.buildRobot(toSpawn, spawnLoc);
-            trackSpawn(toSpawn);
+        // Try to spawn the chosen unit
+        UnitType actualSpawn = trySpawnUnit(rc, toSpawn, enemies);
 
+        if (actualSpawn != null) {
             if (panicMode) {
-                rc.setIndicatorString("P6: PANIC SPAWN " + toSpawn);
+                rc.setIndicatorString("P6: PANIC SPAWN " + actualSpawn);
             } else if (inRushMode) {
-                rc.setIndicatorString("P6: RUSH DEFENSE " + toSpawn);
+                rc.setIndicatorString("P6: RUSH DEFENSE " + actualSpawn);
             } else {
-                rc.setIndicatorString("P6: Spawned " + toSpawn);
+                rc.setIndicatorString("P6: Spawned " + actualSpawn);
             }
         }
+    }
+
+    /**
+     * Try to spawn the specified unit type at any available location.
+     * Falls back to other unit types if the preferred one can't be built.
+     * Returns the unit type spawned, or null if couldn't spawn anything.
+     */
+    private static UnitType trySpawnUnit(RobotController rc, UnitType unitType,
+                                          RobotInfo[] enemies) throws GameActionException {
+        // Define fallback order: preferred unit first, then alternatives
+        UnitType[] fallbackOrder;
+        switch (unitType) {
+            case SPLASHER:
+                // Splasher → Soldier → Mopper (keep combat capability)
+                fallbackOrder = new UnitType[]{UnitType.SPLASHER, UnitType.SOLDIER, UnitType.MOPPER};
+                break;
+            case SOLDIER:
+                // Soldier → Splasher → Mopper (keep combat capability)
+                fallbackOrder = new UnitType[]{UnitType.SOLDIER, UnitType.SPLASHER, UnitType.MOPPER};
+                break;
+            case MOPPER:
+            default:
+                // Mopper → Soldier → Splasher
+                fallbackOrder = new UnitType[]{UnitType.MOPPER, UnitType.SOLDIER, UnitType.SPLASHER};
+                break;
+        }
+
+        // Try each unit type in fallback order
+        for (UnitType tryType : fallbackOrder) {
+            MapLocation spawnLoc = findSpawnLocation(rc, tryType, enemies);
+            if (spawnLoc != null && rc.canBuildRobot(tryType, spawnLoc)) {
+                rc.buildRobot(tryType, spawnLoc);
+                trackSpawn(tryType);
+                return tryType;
+            }
+        }
+
+        return null;  // Couldn't spawn anything
     }
 
     // ==================== SPAWN LOGIC ====================
 
     /**
      * Choose unit type to spawn.
-     * Sub-priorities:
-     *   A. Panic mode → soldiers only
-     *   B. Rush mode → 90% soldiers
-     *   C. Under threat → soldiers
-     *   C1. Strategy counter → adaptive spawning
-     *   C2. Counter enemy splashers → more soldiers/moppers
-     *   D. Early game → mostly soldiers
-     *   E. Mid game → balanced composition
-     *   F. Late game → more splashers
+     * SIMPLIFIED: Round-based spawning with splashers from the start.
+     * Only override for true emergencies (panic/rush).
      */
     private static UnitType chooseUnitToSpawn(int round, boolean underThreat,
                                                boolean panicMode, boolean inRushMode,
                                                int enemySplashers) {
-        // Sub-A: Panic mode
+        // EMERGENCY: Panic mode - need soldiers to defend
         if (panicMode) {
             return UnitType.SOLDIER;
         }
 
-        // Sub-B: Rush mode
+        // EMERGENCY: Rush detected - need soldiers fast
         if (inRushMode) {
-            return Utils.rng.nextInt(10) < 9 ? UnitType.SOLDIER : UnitType.MOPPER;
-        }
-
-        // Sub-C: Under threat
-        if (underThreat) {
-            return UnitType.SOLDIER;
-        }
-
-        // Sub-C1: Strategy-based counter spawning
-        Utils.EnemyStrategy strategy = Utils.detectEnemyStrategy(round);
-        switch (strategy) {
-            case RUSHING:
-                // Counter rush with soldiers
-                return UnitType.SOLDIER;
-            case SPLASHER_HEAVY:
-                // Counter splashers with soldiers to hunt them
-                if (Utils.rng.nextInt(10) < 8) return UnitType.SOLDIER;
-                return UnitType.MOPPER;
-            case TURTLING:
-                // Break turtle with splashers
-                if (Utils.rng.nextInt(10) < 7) return UnitType.SPLASHER;
-                return UnitType.SOLDIER;
-            default:
-                break;  // Fall through to normal logic
-        }
-
-        // Sub-C2: Counter enemy splashers (adaptive spawning)
-        if (enemySplashers >= 2) {
-            // Splashers are slow and vulnerable - soldiers hunt them
-            // Spawn extra soldiers/moppers to eliminate enemy splashers
-            if (Utils.rng.nextInt(10) < 7) {  // 70% soldiers
-                return UnitType.SOLDIER;
-            }
-            return UnitType.MOPPER;  // 30% moppers for mop swing
-        }
-
-        // Sub-C3: Economy-aware spawning
-        if (Utils.isEconomyWeak() && round > 200) {
-            // Weak economy: focus on soldiers for tower building
-            if (Utils.rng.nextInt(10) < 8) return UnitType.SOLDIER;  // 80%
+            int choice = Utils.rng.nextInt(10);
+            if (choice < 8) return UnitType.SOLDIER;  // 80%
             return UnitType.MOPPER;  // 20%
         }
 
-        if (Utils.isEconomyStrong() && round > 400) {
-            // Strong economy: can afford more splashers for territory push
+        // ROUND-BASED SPAWNING (simplified, always includes splashers)
+
+        // Rounds 1-75: All soldiers for initial expansion
+        if (round < 75) {
+            return UnitType.SOLDIER;
+        }
+
+        // Rounds 75-200: Start introducing splashers early!
+        if (round < 200) {
             int choice = Utils.rng.nextInt(10);
-            if (choice < 6) return UnitType.SPLASHER;  // 60%
-            if (choice < 9) return UnitType.SOLDIER;   // 30%
-            return UnitType.MOPPER;  // 10%
+            if (choice < 5) return UnitType.SOLDIER;   // 50%
+            if (choice < 8) return UnitType.SPLASHER;  // 30% - start contesting early!
+            return UnitType.MOPPER;                     // 20%
         }
 
-        // Sub-D: Early game (rounds 1-300) - AGGRESSIVE SOLDIER SPAWNING
-        if (round < 300) {
-            // Almost all soldiers early for maximum paint coverage
-            if (soldiersSpawned < 5 || Utils.rng.nextInt(10) < 9) {
-                return UnitType.SOLDIER;
-            }
-            return UnitType.MOPPER;
+        // Rounds 200-500: Balanced mid-game
+        if (round < 500) {
+            int choice = Utils.rng.nextInt(10);
+            if (choice < 3) return UnitType.SOLDIER;   // 30%
+            if (choice < 8) return UnitType.SPLASHER;  // 50% - heavy contesting!
+            return UnitType.MOPPER;                     // 20%
         }
 
-        // Sub-E: Mid game (200-600)
-        if (round < 600) {
-            int total = soldiersSpawned + moppersSpawned + splashersSpawned;
-            if (total == 0) return UnitType.SOLDIER;
-
-            float soldierRatio = (float) soldiersSpawned / total;
-            float mopperRatio = (float) moppersSpawned / total;
-
-            // Target: 40% soldiers, 20% moppers, 40% splashers (MORE SPLASHERS)
-            if (soldierRatio < 0.4) return UnitType.SOLDIER;
-            if (mopperRatio < 0.2) return UnitType.MOPPER;
-            return UnitType.SPLASHER;
-        }
-
-        // Sub-F: Late game (600+) - SPLASHER HEAVY
+        // Rounds 500+: Late game push - maximum splashers
         int choice = Utils.rng.nextInt(10);
-        if (choice < 3) return UnitType.SOLDIER;  // 30%
-        if (choice < 5) return UnitType.MOPPER;   // 20%
-        return UnitType.SPLASHER;                  // 50%
+        if (choice < 2) return UnitType.SOLDIER;  // 20%
+        if (choice < 3) return UnitType.MOPPER;   // 10%
+        return UnitType.SPLASHER;                  // 70% - massive push!
     }
 
     // ==================== HELPER METHODS ====================
@@ -399,6 +387,18 @@ public class Tower {
                 break;
             default: break;
         }
+    }
+
+    /**
+     * NOTE: In Battlecode 2025, TOWERS CANNOT TRANSFER PAINT TO UNITS!
+     * Only moppers can give paint to other robots.
+     * Units must TAKE paint from towers using transferPaint with NEGATIVE amount.
+     * This method is a no-op now - leaving for documentation.
+     */
+    private static void refillAdjacentUnits(RobotController rc) throws GameActionException {
+        // TOWERS CANNOT TRANSFER PAINT - units must take it themselves!
+        // See: "You can give paint to an allied robot if you are a mopper"
+        // See: "You can give/take paint from allied towers regardless of type"
     }
 
     /**

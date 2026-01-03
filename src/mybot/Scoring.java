@@ -34,9 +34,10 @@ public class Scoring {
     public static final int WEIGHT_ALLY_TOWER = 15;
 
     // ==================== SPLASH SCORING ====================
-    public static final int WEIGHT_SPLASH_ENEMY = 2;
-    public static final int WEIGHT_SPLASH_NEUTRAL = 1;
-    public static final int WEIGHT_SPLASH_ALLY = -3;
+    // Strongly prefer enemy paint - splashers should CONTEST territory!
+    public static final int WEIGHT_SPLASH_ENEMY = 5;    // Was 2 - much higher value
+    public static final int WEIGHT_SPLASH_NEUTRAL = 1;  // Keep same
+    public static final int WEIGHT_SPLASH_ALLY = -5;    // Was -3 - stronger penalty
 
     // ==================== HEALTH/RESOURCE FACTORS ====================
     public static final int WEIGHT_LOW_HEALTH = -30;
@@ -46,8 +47,8 @@ public class Scoring {
     // ==================== THRESHOLDS ==================== (AGGRESSIVE)
     public static final int THRESHOLD_GOOD_TILE = 5;
     public static final int THRESHOLD_BAD_TILE = -10;
-    public static final int THRESHOLD_SPLASH_WORTH = 2;  // Lower = splash more often
-    public static final int THRESHOLD_SPLASH_HIGH = 4;   // Lower = splash more often
+    public static final int THRESHOLD_SPLASH_WORTH = 1;  // Was 2 - splash more often
+    public static final int THRESHOLD_SPLASH_HIGH = 3;   // Was 4 - lower bar for "high value"
     public static final int THRESHOLD_HIGH_THREAT = -25;
 
     // ==================== SCORING METHODS ====================

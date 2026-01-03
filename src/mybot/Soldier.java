@@ -10,12 +10,31 @@ import battlecode.common.*;
  */
 public class Soldier {
 
+    // ==================== DEBUG LOGGING ====================
+    private static final boolean DEBUG = true;  // Set to false for competition
+
+    private static void log(RobotController rc, String prefix, String msg) {
+        if (!DEBUG) return;
+        System.out.println("[S#" + rc.getID() + " r" + rc.getRoundNum() + "] " + prefix + ": " + msg);
+    }
+
+    private static void logState(RobotController rc, SoldierState from, SoldierState to, String reason) {
+        if (!DEBUG) return;
+        System.out.println("[S#" + rc.getID() + " r" + rc.getRoundNum() + "] STATE: " + from + " -> " + to + " (" + reason + ")");
+    }
+
+    private static void logPrio(RobotController rc, int prio, String action) {
+        if (!DEBUG) return;
+        System.out.println("[S#" + rc.getID() + " r" + rc.getRoundNum() + "] P" + prio + ": " + action);
+    }
+
     private static MapLocation targetRuin = null;
     private static UnitType targetTowerType = null;  // Tower type being built
 
-    // Thresholds (tune these during competition) - AGGRESSIVE
+    // Thresholds (tune these during competition)
+    // CRITICAL: In Battlecode 2025, paint=0 means CAN'T MOVE! Must retreat early.
     private static final int HEALTH_CRITICAL = 15;  // Lower = fight longer
-    private static final int PAINT_LOW = 30;        // Lower = fight longer
+    private static final int PAINT_LOW = 50;        // Raised! Need paint to reach tower
     private static final int WEAK_ENEMY_HEALTH = 60; // Higher = target more enemies
     private static final int EARLY_GAME_ROUNDS = 100;
 
@@ -42,6 +61,12 @@ public class Soldier {
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
+
+        // ===== DEBUG: Status every 25 rounds =====
+        if (DEBUG && round % 25 == 0) {
+            log(rc, "STATUS", "state=" + state + " paint=" + rc.getPaint() + " hp=" + rc.getHealth() +
+                " loc=" + myLoc + " target=" + targetRuin);
+        }
 
         // ===== SPAWN LOCATION: Remember where we came from =====
         if (spawnLocation == null) {
@@ -168,6 +193,7 @@ public class Soldier {
 
         // ===== PRIORITY 3: RESUPPLY =====
         if (rc.getPaint() < paintThreshold) {
+            logPrio(rc, 3, "RETREAT paint=" + rc.getPaint() + " < threshold=" + paintThreshold);
             Metrics.trackSoldierPriority(3);
             Metrics.trackLowPaint();
             enterState(SoldierState.RETREATING, null, round);
@@ -280,8 +306,12 @@ public class Soldier {
 
         // ===== PRIORITY 6: TOWER BUILDING =====
         MapLocation[] ruins = rc.senseNearbyRuins(-1);
+        if (DEBUG && ruins.length > 0) {
+            log(rc, "TOWER", "found " + ruins.length + " ruins, paint=" + rc.getPaint());
+        }
         MapLocation bestRuin = findBuildableRuin(rc, ruins);
         if (bestRuin != null) {
+            logPrio(rc, 6, "starting tower at " + bestRuin + " paint=" + rc.getPaint());
             Metrics.trackSoldierPriority(6);
             Metrics.trackTowerAttempt();  // Track attempt for TowerSuccess metric
             targetRuin = bestRuin;
@@ -585,6 +615,13 @@ public class Soldier {
     private static MapLocation findBuildableRuin(RobotController rc, MapLocation[] ruins) throws GameActionException {
         if (ruins == null || ruins.length == 0) return null;
 
+        // Only start tower building if we have reasonable paint
+        // Building pattern costs ~50 paint, need buffer for movement
+        int currentPaint = rc.getPaint();
+        if (currentPaint < 80) {
+            return null;  // Not enough paint to build
+        }
+
         MapLocation myLoc = rc.getLocation();
         MapLocation best = null;
         int bestDist = Integer.MAX_VALUE;
@@ -612,16 +649,24 @@ public class Soldier {
         // Choose tower type if not already set
         if (targetTowerType == null) {
             targetTowerType = chooseTowerType(rc);
+            log(rc, "TOWER", "chose type=" + targetTowerType);
         }
 
         String towerName = targetTowerType.toString().replace("LEVEL_ONE_", "");
         rc.setIndicatorString("P6: Building " + towerName + " at " + ruin);
         rc.setIndicatorLine(myLoc, ruin, 0, 255, 0);
 
-        // CRITICAL: Soldier attack costs 5 paint - must have enough!
-        // If low on paint, retreat to refill before continuing
-        if (rc.getPaint() < 10) {
-            rc.setIndicatorString("P6: Low paint, retreating to refill");
+        // CRITICAL: In Battlecode 2025, units with paint=0 CANNOT MOVE!
+        // Must retreat with enough paint to actually reach a tower.
+        // Need ~50 paint: movement costs + paint drain + buffer
+        if (rc.getPaint() < 50) {
+            log(rc, "TOWER", "LOW PAINT=" + rc.getPaint() + " -> RETREATING state (need 50+)");
+            rc.setIndicatorString("P6: Low paint, switching to RETREAT");
+            // CRITICAL: Change state so we don't loop back here!
+            state = SoldierState.RETREATING;
+            stateTarget = null;
+            stateTurns = 0;
+            // Keep targetRuin/targetTowerType so we can resume after refill
             retreatForPaint(rc);
             return;
         }
@@ -756,21 +801,143 @@ public class Soldier {
     private static void retreatForPaint(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
 
-        // Priority 1: Find visible tower
+        // Log current tile paint type and health
+        MapInfo currentTile = rc.senseMapInfo(myLoc);
+        PaintType standingOn = currentTile.getPaint();
+        if (DEBUG) {
+            log(rc, "RETREAT", "hp=" + rc.getHealth() + " paint=" + rc.getPaint() +
+                " standing on " + standingOn + " at " + myLoc);
+        }
+
+        // Priority 1: Find visible PAINT or DEFENSE tower (they have paint to give)
+        // NEVER go to MONEY towers - they have 0 paint!
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+        MapLocation towerLoc = null;
         for (RobotInfo ally : allies) {
-            if (ally.getType().isTowerType()) {
-                rc.setIndicatorString("P3: Retreating to tower at " + ally.getLocation());
-                rc.setIndicatorLine(myLoc, ally.getLocation(), 0, 255, 0);
-                Metrics.trackRetreatOutcome("tower");
-                Navigation.moveTo(rc, ally.getLocation());
+            UnitType type = ally.getType();
+            if (type.isTowerType()) {
+                // Only Paint and Defense towers have paint
+                // Money towers have 0 paint - skip them!
+                if (Utils.isPaintTower(type) || Utils.isDefenseTower(type)) {
+                    towerLoc = ally.getLocation();
+                    break;  // Found usable tower
+                }
+            }
+        }
+
+        if (towerLoc != null) {
+            int dist = myLoc.distanceSquaredTo(towerLoc);
+            log(rc, "RETREAT", "found tower at " + towerLoc + " dist=" + dist);
+
+            // If adjacent to tower (dist <= 2), TAKE paint from tower!
+            if (dist <= 2) {
+                // KEY INSIGHT: In Battlecode 2025, units must TAKE paint from towers!
+                // Use transferPaint with NEGATIVE amount to take paint.
+                int currentPaint = rc.getPaint();
+                int maxPaint = rc.getType().paintCapacity;  // 200 for soldiers
+                int needed = maxPaint - currentPaint;
+
+                if (needed > 10) {  // Only bother if we need paint
+                    RobotInfo towerInfo = rc.senseRobotAtLocation(towerLoc);
+                    int towerPaint = (towerInfo != null) ? towerInfo.getPaintAmount() : 0;
+
+                    // Can only take what the tower has (and leave some for tower)
+                    int canTake = Math.min(needed, towerPaint - 10);  // Leave 10 for tower
+                    if (canTake > 0 && rc.isActionReady()) {
+                        int takeAmount = -canTake;  // Negative = take from tower
+                        if (rc.canTransferPaint(towerLoc, takeAmount)) {
+                            rc.transferPaint(towerLoc, takeAmount);
+                            int afterPaint = rc.getPaint();
+                            log(rc, "RETREAT", "TOOK " + canTake + " paint! Now have " + afterPaint);
+                            rc.setIndicatorString("Refilled: " + afterPaint + " paint");
+                            // Exit retreat when we have enough paint to build (80+)
+                            if (afterPaint >= 80) {
+                                log(rc, "RETREAT", "Paint good (" + afterPaint + ") - resuming normal ops");
+                                state = SoldierState.IDLE;
+                            }
+                            return;
+                        }
+                    }
+
+                    // If tower has no paint, maybe find another tower nearby
+                    if (towerPaint < 15) {
+                        log(rc, "RETREAT", "Tower at " + towerLoc + " has low paint=" + towerPaint + ", waiting...");
+                    }
+                }
+
+                // If paint is enough to build, we can leave
+                if (currentPaint >= 80) {
+                    log(rc, "RETREAT", "Paint refilled to " + currentPaint + ", exiting retreat");
+                    state = SoldierState.IDLE;
+                    return;
+                }
+
+                // If on ally paint, stay put and try again next turn
+                if (standingOn.isAlly()) {
+                    log(rc, "RETREAT", "Waiting on ally paint near tower - paint=" + rc.getPaint());
+                    rc.setIndicatorString("Waiting for paint transfer...");
+                    return;
+                }
+
+                // On EMPTY/enemy paint - need to get to ally paint
+                // First: If we have paint, paint our current tile to stop drain!
+                if (rc.getPaint() >= 5 && rc.canAttack(myLoc)) {
+                    log(rc, "RETREAT", "painting current tile to stop drain");
+                    rc.attack(myLoc);
+                    return;
+                }
+
+                // Second: Try to move to ally paint tile near tower
+                MapLocation bestAllyTile = null;
+                int bestDist = Integer.MAX_VALUE;
+                for (Direction dir : Direction.allDirections()) {
+                    if (dir == Direction.CENTER) continue;
+                    MapLocation adjLoc = towerLoc.add(dir);
+                    if (!rc.canSenseLocation(adjLoc)) continue;
+                    MapInfo adjInfo = rc.senseMapInfo(adjLoc);
+                    if (adjInfo.getPaint().isAlly()) {
+                        int d = myLoc.distanceSquaredTo(adjLoc);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestAllyTile = adjLoc;
+                        }
+                    }
+                }
+                if (bestAllyTile != null) {
+                    log(rc, "RETREAT", "moving to ally paint at " + bestAllyTile);
+                    Navigation.moveTo(rc, bestAllyTile);
+                    return;
+                }
+
+                // No ally paint near tower - just wait here and hope tower paints
+                log(rc, "RETREAT", "no ally paint near tower, waiting");
+                return;
+            }
+
+            rc.setIndicatorString("P3: Retreating to tower at " + towerLoc);
+            rc.setIndicatorLine(myLoc, towerLoc, 0, 255, 0);
+            Metrics.trackRetreatOutcome("tower");
+            Navigation.moveTo(rc, towerLoc);
+            return;
+        }
+
+        // Priority 2: Follow ally paint trail toward spawn
+        // Skip to spawn if we're not making progress toward a tower
+        if (spawnLocation != null) {
+            int distToSpawn = myLoc.distanceSquaredTo(spawnLocation);
+            if (distToSpawn > 4) {  // If not near spawn, go directly there
+                log(rc, "RETREAT", "heading to spawn at " + spawnLocation + " dist=" + distToSpawn);
+                rc.setIndicatorString("P3: Returning to spawn (" + distToSpawn + " away)");
+                Metrics.trackRetreatOutcome("spawn");
+                Navigation.moveTo(rc, spawnLocation);
                 return;
             }
         }
 
-        // Priority 2: Navigate to spawn location (ALWAYS go home, don't follow random paint)
+        // Priority 3: Navigate to spawn location
         if (spawnLocation != null) {
             int distToSpawn = myLoc.distanceSquaredTo(spawnLocation);
+            log(rc, "RETREAT", "heading to spawn at " + spawnLocation + " dist=" + distToSpawn);
             rc.setIndicatorString("P3: Returning to spawn (" + distToSpawn + " away)");
             rc.setIndicatorLine(myLoc, spawnLocation, 255, 255, 0);
             Metrics.trackRetreatOutcome("wandering");
@@ -778,7 +945,8 @@ public class Soldier {
             return;
         }
 
-        // Fallback: Random movement (should rarely happen)
+        // Fallback: Random movement
+        log(rc, "RETREAT", "LOST - no spawn, no paint, no tower!");
         rc.setIndicatorString("P3: LOST - no spawn location!");
         Metrics.trackRetreatOutcome("wandering");
         Utils.tryMoveRandom(rc);
@@ -846,8 +1014,8 @@ public class Soldier {
                     state = SoldierState.IDLE;
                     return;
                 }
-                // Exit if health and paint restored
-                if (rc.getHealth() > 80 && rc.getPaint() > 100) {
+                // Need 120+ paint to be productive (tower building needs ~70)
+                if (rc.getHealth() > 50 && rc.getPaint() >= 120) {
                     state = SoldierState.IDLE;
                 }
                 break;

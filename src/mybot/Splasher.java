@@ -12,7 +12,7 @@ public class Splasher {
 
     // Thresholds (tune these during competition) - AGGRESSIVE
     private static final int HEALTH_CRITICAL = 20;  // Lower = fight longer
-    private static final int PAINT_LOW = 60;        // Lower = fight longer
+    private static final int PAINT_LOW = 40;        // Was 60 - fight longer before retreating
     // Splash thresholds now in Scoring.java
 
     // ==================== SPAWN LOCATION ====================
@@ -171,15 +171,29 @@ public class Splasher {
             }
         }
 
-        // ===== PRIORITY 3: ADVANCE TO ENEMY TERRITORY (moved up) =====
+        // ===== PRIORITY 3: ADVANCE TO ENEMY TERRITORY =====
         // Splashers are the ONLY units that can contest enemy paint!
+        // ALWAYS push forward, even when no enemy paint is visible yet
         MapLocation enemyTerritory = findEnemyTerritory(rc);
         if (enemyTerritory != null) {
+            // Enemy paint visible - go contest it!
             Metrics.trackSplasherPriority(3);
             enterState(SplasherState.ADVANCING_TERRITORY, enemyTerritory);
-            rc.setIndicatorString("P3: Advancing to enemy territory");
+            rc.setIndicatorString("P3: Contesting enemy territory!");
+            rc.setIndicatorLine(myLoc, enemyTerritory, 255, 0, 128);
             Navigation.moveTo(rc, enemyTerritory);
             return;
+        } else {
+            // No enemy paint visible - push toward enemy side of map
+            MapLocation pushTarget = getPushTarget(rc);
+            int distToPush = myLoc.distanceSquaredTo(pushTarget);
+            if (distToPush > 25) {  // Still have ground to cover
+                Metrics.trackSplasherPriority(3);
+                rc.setIndicatorString("P3: Pushing forward to " + pushTarget);
+                rc.setIndicatorLine(myLoc, pushTarget, 128, 0, 255);
+                Navigation.moveTo(rc, pushTarget);
+                return;
+            }
         }
 
         // ===== PRIORITY 4: MEDIUM-VALUE SPLASH (3+ tiles) =====
@@ -305,6 +319,37 @@ public class Splasher {
     }
 
     /**
+     * Calculate direction to push toward (away from spawn toward enemy).
+     * This gives splashers a goal even when no enemy paint is visible.
+     */
+    private static MapLocation getPushTarget(RobotController rc) throws GameActionException {
+        MapLocation myLoc = rc.getLocation();
+        int mapWidth = rc.getMapWidth();
+        int mapHeight = rc.getMapHeight();
+        MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
+
+        // If we have spawn location, push AWAY from it (toward enemy)
+        if (spawnLocation != null) {
+            // Vector from spawn to us, extended further
+            int dx = myLoc.x - spawnLocation.x;
+            int dy = myLoc.y - spawnLocation.y;
+
+            // If we haven't moved far from spawn, push toward center
+            if (dx == 0 && dy == 0) {
+                return mapCenter;
+            }
+
+            // Push in that direction (away from base)
+            int targetX = Math.min(mapWidth - 1, Math.max(0, myLoc.x + dx));
+            int targetY = Math.min(mapHeight - 1, Math.max(0, myLoc.y + dy));
+            return new MapLocation(targetX, targetY);
+        }
+
+        // Fallback: push toward map center
+        return mapCenter;
+    }
+
+    /**
      * Emergency retreat when health is critical.
      */
     private static void retreat(RobotController rc) throws GameActionException {
@@ -377,11 +422,12 @@ public class Splasher {
     }
 
     /**
-     * Default exploration behavior.
+     * Default exploration behavior - push toward enemy territory.
      */
     private static void explore(RobotController rc) throws GameActionException {
-        Utils.tryMoveRandom(rc);
-        rc.setIndicatorString("P5: Exploring");
+        MapLocation pushTarget = getPushTarget(rc);
+        Navigation.moveTo(rc, pushTarget);
+        rc.setIndicatorString("P5: Pushing toward " + pushTarget);
     }
 
     // ==================== FSM METHODS ====================

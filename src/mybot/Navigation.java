@@ -24,13 +24,26 @@ public class Navigation {
     private static boolean useRightHand = true;  // Start with right-hand rule
     private static final int DIRECTION_SWITCH_THRESHOLD = 15;  // Switch after N turns
 
+    // Debug flag
+    private static final boolean DEBUG = true;
+
     /**
      * Move toward a target location using improved Bug2 navigation.
      * Returns true if movement occurred.
      */
     public static boolean moveTo(RobotController rc, MapLocation target) throws GameActionException {
         if (target == null) return false;
-        if (!rc.isMovementReady()) return false;
+        if (!rc.isMovementReady()) {
+            if (DEBUG) {
+                // Get all relevant cooldown info
+                int moveCool = rc.getMovementCooldownTurns();
+                int actionCool = rc.getActionCooldownTurns();
+                int paint = rc.getPaint();
+                System.out.println("[NAV #" + rc.getID() + " r" + rc.getRoundNum() +
+                    "] NOT READY move_cd=" + moveCool + " action_cd=" + actionCool + " paint=" + paint);
+            }
+            return false;
+        }
 
         MapLocation myLoc = rc.getLocation();
 
@@ -74,6 +87,18 @@ public class Navigation {
             if (rc.canMove(right)) {
                 rc.move(right);
                 return true;
+            }
+
+            // Debug: log why we can't move
+            if (DEBUG) {
+                StringBuilder blocked = new StringBuilder();
+                for (Direction d : Direction.allDirections()) {
+                    if (!rc.canMove(d)) {
+                        blocked.append(d.name().charAt(0));
+                    }
+                }
+                System.out.println("[NAV #" + rc.getID() + " r" + rc.getRoundNum() +
+                    "] at " + myLoc + " can't reach " + target + " blocked:" + blocked);
             }
 
             // Start obstacle tracing
