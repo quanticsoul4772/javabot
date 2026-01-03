@@ -28,6 +28,26 @@ public class Nav {
         MapLocation myLoc = rc.getLocation();
         if (myLoc.equals(target)) return false;
 
+        Direction targetDir = myLoc.directionTo(target);
+
+        // Simple direct movement for early rounds to save bytecode
+        int round = rc.getRoundNum();
+        if (round < 15) {
+            if (rc.canMove(targetDir)) {
+                rc.move(targetDir);
+                return true;
+            }
+            if (rc.canMove(targetDir.rotateLeft())) {
+                rc.move(targetDir.rotateLeft());
+                return true;
+            }
+            if (rc.canMove(targetDir.rotateRight())) {
+                rc.move(targetDir.rotateRight());
+                return true;
+            }
+            return false;
+        }
+
         // Reset if target changed
         if (!target.equals(currentTarget)) {
             currentTarget = target;
@@ -37,8 +57,6 @@ public class Nav {
             tracingTurns = 0;
             useRightHand = true;
         }
-
-        Direction targetDir = myLoc.directionTo(target);
 
         if (!isTracing) {
             // Try direct movement
@@ -124,7 +142,7 @@ public class Nav {
         if (!rc.isMovementReady()) return false;
 
         Direction[] dirs = Globals.DIRECTIONS;
-        int start = Globals.rng.nextInt(8);
+        int start = Globals.getRng(rc).nextInt(8);
         for (int i = 0; i < 8; i++) {
             Direction d = dirs[(start + i) % 8];
             if (rc.canMove(d)) {
@@ -161,5 +179,43 @@ public class Nav {
         lineStart = null;
         tracingTurns = 0;
         useRightHand = true;
+    }
+
+    /**
+     * Move toward target with micro scoring for combat situations.
+     * Uses paint-aware and threat-aware movement.
+     */
+    public static boolean moveToWithMicro(RobotController rc, MapLocation target) throws GameActionException {
+        if (!rc.isMovementReady()) return false;
+
+        Direction targetDir = rc.getLocation().directionTo(target);
+        Micro.score(rc, targetDir);
+        Direction best = Micro.getBestDirection();
+
+        if (best != Direction.CENTER && rc.canMove(best)) {
+            rc.move(best);
+            return true;
+        }
+
+        // Fall back to regular movement if micro fails
+        return moveTo(rc, target);
+    }
+
+    /**
+     * Retreat movement - prioritizes safety over reaching target.
+     */
+    public static boolean retreatFrom(RobotController rc, MapLocation threat) throws GameActionException {
+        if (!rc.isMovementReady()) return false;
+
+        Direction away = rc.getLocation().directionTo(threat).opposite();
+        Micro.score(rc, away);
+        Direction best = Micro.getBestDirection();
+
+        if (best != Direction.CENTER && rc.canMove(best)) {
+            rc.move(best);
+            return true;
+        }
+
+        return moveAway(rc, threat);
     }
 }

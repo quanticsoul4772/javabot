@@ -42,21 +42,49 @@ public class Globals {
     // Early game: first N units are always soldiers
     public static final int EARLY_SOLDIERS_COUNT = 3;
 
+    // Global spawn tracking (shared across all towers)
+    public static int spawnedSoldiers = 0;
+    public static int spawnedSplashers = 0;
+    public static int spawnedMoppers = 0;
+    public static int spawnedTotal = 0;
+
+    // Fractional accumulators for ratio maintenance
+    public static double fracSoldiers = 0;
+    public static double fracSplashers = 0;
+    public static double fracMoppers = 0;
+
     // Direction arrays
     public static final Direction[] DIRECTIONS = {
         Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
         Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST
     };
 
+    // All directions including CENTER (for micro scoring)
+    public static final Direction[] ALL_DIRECTIONS = {
+        Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
+        Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
+        Direction.CENTER
+    };
+
     private static boolean initialized = false;
 
     /**
      * Initialize globals for a robot (once only).
+     * Delayed RNG init to save bytecode on early rounds.
      */
     public static void init(RobotController rc) {
         if (!initialized) {
-            rng = new Random(rc.getID());
             initialized = true;
         }
+    }
+
+    /**
+     * Get RNG, initializing if needed.
+     */
+    public static Random getRng(RobotController rc) {
+        if (rng == null) {
+            rng = new Random(rc.getID());
+        }
+        return rng;
     }
 }

@@ -10,6 +10,8 @@ public class Splasher {
 
     public static void run(RobotController rc) throws GameActionException {
         Globals.init(rc);
+        POI.init(rc);
+        POI.scanNearby(rc);
 
         // Retreat check (same as soldier)
         if (shouldRetreat(rc)) {
@@ -37,7 +39,17 @@ public class Splasher {
     }
 
     private static void runRetreat(RobotController rc) throws GameActionException {
-        MapLocation tower = findNearestPaintTower(rc);
+        MapLocation myLoc = rc.getLocation();
+        Team myTeam = rc.getTeam();
+
+        // First try POI system for global tower knowledge
+        MapLocation tower = POI.findNearestAllyPaintTower(myLoc, myTeam);
+
+        // Fall back to visible towers
+        if (tower == null) {
+            tower = findNearestPaintTower(rc);
+        }
+
         if (tower != null) {
             Nav.moveTo(rc, tower);
         } else {
@@ -57,8 +69,8 @@ public class Splasher {
         // Splasher attack range is 2 (splash affects area)
         MapInfo[] nearby = rc.senseNearbyMapInfos(9);  // Range squared = 9
 
-        for (MapInfo info : nearby) {
-            MapLocation loc = info.getMapLocation();
+        for (int i = nearby.length; --i >= 0;) {
+            MapLocation loc = nearby[i].getMapLocation();
             if (!rc.canAttack(loc)) continue;
 
             int score = scoreSplashTarget(rc, loc);
@@ -115,15 +127,36 @@ public class Splasher {
         Direction bestDir = null;
         int bestScore = Integer.MIN_VALUE;
 
-        for (Direction d : Globals.DIRECTIONS) {
+        // Check for enemies - use micro if present
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        if (enemies.length > 0 && Micro.shouldEngage(rc)) {
+            // Find nearest enemy for direction bias
+            RobotInfo closest = null;
+            int closestDist = Integer.MAX_VALUE;
+            for (int i = enemies.length; --i >= 0;) {
+                int dist = myLoc.distanceSquaredTo(enemies[i].getLocation());
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closest = enemies[i];
+                }
+            }
+            if (closest != null) {
+                Nav.moveToWithMicro(rc, closest.getLocation());
+                return;
+            }
+        }
+
+        Direction[] dirs = Globals.DIRECTIONS;
+        for (int i = dirs.length; --i >= 0;) {
+            Direction d = dirs[i];
             if (!rc.canMove(d)) continue;
 
             MapLocation newLoc = myLoc.add(d);
             int score = 0;
 
             // Check surrounding tiles for enemy paint
-            for (Direction d2 : Globals.DIRECTIONS) {
-                MapLocation check = newLoc.add(d2);
+            for (int j = dirs.length; --j >= 0;) {
+                MapLocation check = newLoc.add(dirs[j]);
                 if (rc.canSenseLocation(check)) {
                     MapInfo info = rc.senseMapInfo(check);
                     if (info.getPaint().isEnemy()) score += 3;
@@ -154,10 +187,12 @@ public class Splasher {
         MapLocation best = null;
         int bestDist = Integer.MAX_VALUE;
 
-        for (RobotInfo ally : allies) {
-            if (ally.getType() == UnitType.LEVEL_ONE_PAINT_TOWER ||
-                ally.getType() == UnitType.LEVEL_TWO_PAINT_TOWER ||
-                ally.getType() == UnitType.LEVEL_THREE_PAINT_TOWER) {
+        for (int i = allies.length; --i >= 0;) {
+            RobotInfo ally = allies[i];
+            UnitType type = ally.getType();
+            if (type == UnitType.LEVEL_ONE_PAINT_TOWER ||
+                type == UnitType.LEVEL_TWO_PAINT_TOWER ||
+                type == UnitType.LEVEL_THREE_PAINT_TOWER) {
                 int dist = myLoc.distanceSquaredTo(ally.getLocation());
                 if (dist < bestDist) {
                     bestDist = dist;

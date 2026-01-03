@@ -18,6 +18,10 @@ public class Soldier {
     public static void run(RobotController rc) throws GameActionException {
         Globals.init(rc);
 
+        // Initialize POI and scan (throttled internally)
+        POI.init(rc);
+        POI.scanNearby(rc);
+
         // Check mode transitions
         checkModeTransitions(rc);
 
@@ -40,36 +44,48 @@ public class Soldier {
 
     private static void checkModeTransitions(RobotController rc) throws GameActionException {
         int paint = rc.getPaint();
-        int chips = rc.getMoney();
-        int allies = rc.senseNearbyRobots(-1, rc.getTeam()).length;
 
-        // Enter retreat only if very low paint AND low chips AND few allies (SPAARK logic)
-        // This prevents premature retreating during fights
-        if (mode != Mode.RETREAT && paint < 50 && chips < 6000 && allies < 5) {
+        // Only check full retreat logic if paint is low (saves bytecode)
+        if (paint >= 50 && mode != Mode.RETREAT) return;
+
+        int chips = rc.getMoney();
+
+        // Enter retreat only if very low paint AND low chips (skip ally check in early game)
+        if (mode != Mode.RETREAT && paint < 50 && chips < 6000) {
             mode = Mode.RETREAT;
             buildTarget = null;
         }
 
         // Exit retreat when resources recovered
-        if (mode == Mode.RETREAT && (paint >= 100 || chips >= 6000 || allies >= 5)) {
+        if (mode == Mode.RETREAT && (paint >= 100 || chips >= 6000)) {
             mode = Mode.EXPLORE;
         }
     }
 
     private static void doExplore(RobotController rc) throws GameActionException {
-        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         int round = rc.getRoundNum();
 
-        // Priority 0: Rush enemy territory
-        // Attack any enemy in range
-        if (rc.isActionReady()) {
+        // Ultra-simple early game (rounds 1-10): just rush center
+        if (round < 10) {
+            if (rc.isMovementReady()) {
+                MapLocation center = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+                Nav.moveTo(rc, center);
+            }
+            // paintHere is called at end of run(), no need to call here
+            return;
+        }
+
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+
+        // Priority 0: Attack any enemy in range
+        if (rc.isActionReady() && enemies.length > 0) {
             RobotInfo target = null;
-            for (RobotInfo enemy : enemies) {
+            for (int i = enemies.length; --i >= 0;) {
+                RobotInfo enemy = enemies[i];
                 if (rc.canAttack(enemy.getLocation())) {
-                    // Prefer towers, then lowest HP
-                    if (target == null || enemy.getType().isTowerType() ||
-                        (!target.getType().isTowerType() && enemy.getHealth() < target.getHealth())) {
+                    if (target == null || enemy.getType().isTowerType()) {
                         target = enemy;
+                        if (enemy.getType().isTowerType()) break;  // Early exit
                     }
                 }
             }
@@ -79,7 +95,8 @@ public class Soldier {
         }
 
         // Priority 1: Attack enemy towers
-        for (RobotInfo enemy : enemies) {
+        for (int i = enemies.length; --i >= 0;) {
+            RobotInfo enemy = enemies[i];
             if (enemy.getType().isTowerType()) {
                 if (rc.canAttack(enemy.getLocation())) {
                     rc.attack(enemy.getLocation());
@@ -89,21 +106,26 @@ public class Soldier {
             }
         }
 
-        // Priority 2: Move toward nearest enemy unit (if visible)
+        // Priority 2: Move toward nearest enemy unit with micro
         if (enemies.length > 0) {
+            MapLocation myLoc = rc.getLocation();
             RobotInfo closest = null;
             int closestDist = Integer.MAX_VALUE;
-            for (RobotInfo enemy : enemies) {
-                int dist = rc.getLocation().distanceSquaredTo(enemy.getLocation());
+            for (int i = enemies.length; --i >= 0;) {
+                int dist = myLoc.distanceSquaredTo(enemies[i].getLocation());
                 if (dist < closestDist) {
                     closestDist = dist;
-                    closest = enemy;
+                    closest = enemies[i];
                 }
             }
             if (closest != null && rc.isMovementReady()) {
-                Nav.moveTo(rc, closest.getLocation());
+                if (Micro.shouldEngage(rc)) {
+                    Nav.moveToWithMicro(rc, closest.getLocation());
+                } else {
+                    Nav.retreatFrom(rc, closest.getLocation());
+                }
             }
-            return;  // Keep engaging enemies
+            return;
         }
 
         // Priority 3: Rush toward center in early game
@@ -123,7 +145,10 @@ public class Soldier {
             // Skip tower building if enemies nearby
         } else {
             MapLocation[] ruins = rc.senseNearbyRuins(-1);
-            for (MapLocation ruin : ruins) {
+            int myID = rc.getID();
+            Team myTeam = rc.getTeam();
+            for (int r = ruins.length; --r >= 0;) {
+                MapLocation ruin = ruins[r];
                 // Skip if there's already a tower at the ruin
                 RobotInfo robotAtRuin = rc.senseRobotAtLocation(ruin);
                 if (robotAtRuin != null && robotAtRuin.getType().isTowerType()) {
@@ -131,10 +156,11 @@ public class Soldier {
                 }
 
                 // Skip if too many soldiers already building here (max 2)
-                RobotInfo[] nearbyAllies = rc.senseNearbyRobots(ruin, 8, rc.getTeam());
+                RobotInfo[] nearbyAllies = rc.senseNearbyRobots(ruin, 8, myTeam);
                 int buildingCount = 0;
-                for (RobotInfo ally : nearbyAllies) {
-                    if (ally.getType() == UnitType.SOLDIER && ally.getID() < rc.getID()) {
+                for (int a = nearbyAllies.length; --a >= 0;) {
+                    RobotInfo ally = nearbyAllies[a];
+                    if (ally.getType() == UnitType.SOLDIER && ally.getID() < myID) {
                         buildingCount++;
                     }
                 }
@@ -213,27 +239,20 @@ public class Soldier {
         // Paint tiles that need it
         if (rc.isActionReady()) {
             MapInfo[] patternTiles = rc.senseNearbyMapInfos(buildTarget, 8);
-            int markedTiles = 0;
-            int correctTiles = 0;
-            int needPaint = 0;
-            for (MapInfo tile : patternTiles) {
+            for (int t = patternTiles.length; --t >= 0;) {
+                MapInfo tile = patternTiles[t];
                 PaintType mark = tile.getMark();
                 PaintType paint = tile.getPaint();
 
                 // Skip tiles not in pattern
                 if (mark == PaintType.EMPTY) continue;
-                markedTiles++;
 
                 // Skip correctly painted tiles
-                if (mark == paint) {
-                    correctTiles++;
-                    continue;
-                }
+                if (mark == paint) continue;
 
                 // Skip enemy paint (soldiers can't paint over it)
                 if (paint.isEnemy()) continue;
 
-                needPaint++;
                 // Paint this tile
                 MapLocation tileLoc = tile.getMapLocation();
                 if (rc.canAttack(tileLoc)) {
@@ -250,17 +269,25 @@ public class Soldier {
     }
 
     private static void doRetreat(RobotController rc) throws GameActionException {
-        // Find nearest ally tower (any type)
-        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
-        MapLocation nearestTower = null;
-        int bestDist = Integer.MAX_VALUE;
+        MapLocation myLoc = rc.getLocation();
+        Team myTeam = rc.getTeam();
 
-        for (RobotInfo ally : allies) {
-            if (ally.getType().isTowerType()) {
-                int dist = rc.getLocation().distanceSquaredTo(ally.getLocation());
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    nearestTower = ally.getLocation();
+        // Try POI first for global tower knowledge
+        MapLocation nearestTower = POI.findNearestAllyPaintTower(myLoc, myTeam);
+
+        // Fall back to visible towers
+        if (nearestTower == null) {
+            RobotInfo[] allies = rc.senseNearbyRobots(-1, myTeam);
+            int bestDist = Integer.MAX_VALUE;
+
+            for (int i = allies.length; --i >= 0;) {
+                RobotInfo ally = allies[i];
+                if (ally.getType().isTowerType()) {
+                    int dist = myLoc.distanceSquaredTo(ally.getLocation());
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        nearestTower = ally.getLocation();
+                    }
                 }
             }
         }
@@ -293,8 +320,10 @@ public class Soldier {
         MapLocation myLoc = rc.getLocation();
         Direction bestDir = null;
         int bestScore = Integer.MIN_VALUE;
+        Direction[] dirs = Globals.DIRECTIONS;
 
-        for (Direction d : Globals.DIRECTIONS) {
+        for (int i = dirs.length; --i >= 0;) {
+            Direction d = dirs[i];
             if (!rc.canMove(d)) continue;
 
             MapLocation newLoc = myLoc.add(d);
@@ -308,7 +337,7 @@ public class Soldier {
             }
 
             // Add randomness to avoid clustering
-            score += Globals.rng.nextInt(5);
+            score += Globals.getRng(rc).nextInt(5);
 
             if (score > bestScore) {
                 bestScore = score;

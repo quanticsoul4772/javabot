@@ -8,13 +8,13 @@ import battlecode.common.*;
  */
 public class Tower {
 
-    // Spawn tracking for debt-based system
-    private static int soldierSpawns = 0;
-    private static int splasherSpawns = 0;
-    private static int mopperSpawns = 0;
-
     public static void run(RobotController rc) throws GameActionException {
         Globals.init(rc);
+        POI.init(rc);
+
+        // Register self and scan nearby
+        POI.updateTower(rc.getLocation(), rc.getTeam(), rc.getType());
+        POI.scanNearby(rc);
 
         // Attack enemies first
         attack(rc);
@@ -41,7 +41,8 @@ public class Tower {
 
         // Fall back to single target - lowest HP
         RobotInfo weakest = null;
-        for (RobotInfo enemy : enemies) {
+        for (int i = enemies.length; --i >= 0;) {
+            RobotInfo enemy = enemies[i];
             if (rc.canAttack(enemy.getLocation())) {
                 if (weakest == null || enemy.getHealth() < weakest.getHealth()) {
                     weakest = enemy;
@@ -60,14 +61,15 @@ public class Tower {
         MapLocation best = null;
         int bestCount = 1;  // Only AOE if we hit 2+
 
-        for (RobotInfo enemy : enemies) {
+        for (int i = enemies.length; --i >= 0;) {
+            RobotInfo enemy = enemies[i];
             MapLocation loc = enemy.getLocation();
             if (!rc.canAttack(loc)) continue;
 
             // Count enemies in splash radius
             int count = 0;
-            for (RobotInfo other : enemies) {
-                if (other.getLocation().isWithinDistanceSquared(loc, 2)) {
+            for (int j = enemies.length; --j >= 0;) {
+                if (enemies[j].getLocation().isWithinDistanceSquared(loc, 2)) {
                     count++;
                 }
             }
@@ -80,7 +82,7 @@ public class Tower {
     }
 
     /**
-     * Try to spawn a unit - balanced army composition.
+     * Try to spawn a unit - balanced army composition with dynamic weights.
      */
     private static void trySpawn(RobotController rc) throws GameActionException {
         int round = rc.getRoundNum();
@@ -88,40 +90,80 @@ public class Tower {
         int paint = rc.getPaint();
 
         // Early game: spam soldiers (rounds 1-50)
-        if (round < 50) {
+        if (round < 50 || Globals.spawnedTotal < Globals.EARLY_SOLDIERS_COUNT) {
             if (paint >= 200) {
                 spawnUnit(rc, UnitType.SOLDIER, money, round);
             }
             return;
         }
 
-        // Mid/late game: balanced composition
-        // Calculate "debt" for each type (who we should spawn next)
-        double soldierDebt = Globals.SOLDIER_WEIGHT * (soldierSpawns + splasherSpawns + mopperSpawns + 1) - soldierSpawns;
-        double splasherDebt = Globals.SPLASHER_WEIGHT * (soldierSpawns + splasherSpawns + mopperSpawns + 1) - splasherSpawns;
-        double mopperDebt = Globals.MOPPER_WEIGHT * (soldierSpawns + splasherSpawns + mopperSpawns + 1) - mopperSpawns;
+        // Calculate dynamic weights based on game state
+        int numTowers = POI.allyPaintTowers + POI.allyMoneyTowers + POI.allyDefenseTowers;
+        if (numTowers == 0) numTowers = 1;  // Avoid edge cases
 
-        // Try splasher first if highest debt (needs ally paint)
-        if (paint >= 200 && splasherDebt >= soldierDebt && splasherDebt >= mopperDebt) {
-            if (spawnUnit(rc, UnitType.SPLASHER, money, round)) return;
+        // Base weights adjusted by tower count
+        double soldierWeight = Math.max(0.3, Globals.SOLDIER_WEIGHT - (numTowers * 0.05));
+        double splasherWeight = Globals.SPLASHER_WEIGHT + (POI.allyPaintTowers * 0.15);
+        double mopperWeight = Globals.MOPPER_WEIGHT;
+
+        // Normalize weights
+        double sum = soldierWeight + splasherWeight + mopperWeight;
+        soldierWeight /= sum;
+        splasherWeight /= sum;
+        mopperWeight /= sum;
+
+        // Calculate debt using global spawn tracking
+        double soldierDebt = Globals.fracSoldiers + soldierWeight - Globals.spawnedSoldiers;
+        double splasherDebt = Globals.fracSplashers + splasherWeight - Globals.spawnedSplashers;
+        double mopperDebt = Globals.fracMoppers + mopperWeight - Globals.spawnedMoppers;
+
+        // Select unit type based on highest debt
+        UnitType selected = UnitType.SOLDIER;
+        if (splasherDebt >= soldierDebt && splasherDebt >= mopperDebt) {
+            selected = UnitType.SPLASHER;
+        } else if (mopperDebt >= soldierDebt) {
+            selected = UnitType.MOPPER;
         }
 
-        // Try soldier if highest debt
-        if (paint >= 200 && soldierDebt >= mopperDebt) {
-            if (spawnUnit(rc, UnitType.SOLDIER, money, round)) return;
+        // Try to spawn selected type
+        int paintCost = getPaintCost(selected);
+        if (paint >= paintCost && spawnUnit(rc, selected, money, round)) {
+            updateSpawnTracking(selected, soldierWeight, splasherWeight, mopperWeight);
+            return;
         }
 
-        // Try mopper
-        if (paint >= 100) {
-            if (spawnUnit(rc, UnitType.MOPPER, money, round)) return;
-        }
-
-        // Fallback: spawn whatever we can
+        // Fallback: try any unit we can afford
         if (paint >= 200) {
-            spawnUnit(rc, UnitType.SOLDIER, money, round);
+            if (spawnUnit(rc, UnitType.SOLDIER, money, round)) {
+                updateSpawnTracking(UnitType.SOLDIER, soldierWeight, splasherWeight, mopperWeight);
+            }
         } else if (paint >= 100) {
-            spawnUnit(rc, UnitType.MOPPER, money, round);
+            if (spawnUnit(rc, UnitType.MOPPER, money, round)) {
+                updateSpawnTracking(UnitType.MOPPER, soldierWeight, splasherWeight, mopperWeight);
+            }
         }
+    }
+
+    /**
+     * Update global spawn tracking after spawning.
+     */
+    private static void updateSpawnTracking(UnitType type, double sw, double spw, double mw) {
+        Globals.spawnedTotal++;
+        switch (type) {
+            case SOLDIER:
+                Globals.spawnedSoldiers++;
+                break;
+            case SPLASHER:
+                Globals.spawnedSplashers++;
+                break;
+            case MOPPER:
+                Globals.spawnedMoppers++;
+                break;
+        }
+        // Update fractional accumulators
+        Globals.fracSoldiers += sw;
+        Globals.fracSplashers += spw;
+        Globals.fracMoppers += mw;
     }
 
     /**
@@ -151,7 +193,6 @@ public class Tower {
         MapLocation spawnLoc = rc.getLocation().add(spawnDir);
         if (rc.canBuildRobot(type, spawnLoc)) {
             rc.buildRobot(type, spawnLoc);
-            trackSpawn(type);
             return true;
         }
         return false;
@@ -173,7 +214,8 @@ public class Tower {
             toCenter.opposite()
         };
 
-        for (Direction d : tryOrder) {
+        for (int i = 0; i < tryOrder.length; i++) {
+            Direction d = tryOrder[i];
             MapLocation loc = myLoc.add(d);
             if (rc.canBuildRobot(type, loc)) {
                 return d;
@@ -200,19 +242,12 @@ public class Tower {
         }
     }
 
-    private static void trackSpawn(UnitType type) {
-        switch (type) {
-            case SOLDIER: soldierSpawns++; break;
-            case SPLASHER: splasherSpawns++; break;
-            case MOPPER: mopperSpawns++; break;
-        }
-    }
 
     private static int countAllyTowers(RobotController rc) throws GameActionException {
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
         int count = 0;
-        for (RobotInfo ally : allies) {
-            if (ally.getType().isTowerType()) count++;
+        for (int i = allies.length; --i >= 0;) {
+            if (allies[i].getType().isTowerType()) count++;
         }
         return count;
     }
@@ -220,10 +255,11 @@ public class Tower {
     private static int countPaintTowers(RobotController rc) throws GameActionException {
         RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
         int count = 0;
-        for (RobotInfo ally : allies) {
-            if (ally.getType() == UnitType.LEVEL_ONE_PAINT_TOWER ||
-                ally.getType() == UnitType.LEVEL_TWO_PAINT_TOWER ||
-                ally.getType() == UnitType.LEVEL_THREE_PAINT_TOWER) {
+        for (int i = allies.length; --i >= 0;) {
+            UnitType type = allies[i].getType();
+            if (type == UnitType.LEVEL_ONE_PAINT_TOWER ||
+                type == UnitType.LEVEL_TWO_PAINT_TOWER ||
+                type == UnitType.LEVEL_THREE_PAINT_TOWER) {
                 count++;
             }
         }

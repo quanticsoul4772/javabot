@@ -10,6 +10,8 @@ public class Mopper {
 
     public static void run(RobotController rc) throws GameActionException {
         Globals.init(rc);
+        POI.init(rc);
+        POI.scanNearby(rc);
 
         // Retreat check (same as soldier)
         if (shouldRetreat(rc)) {
@@ -48,7 +50,17 @@ public class Mopper {
     }
 
     private static void runRetreat(RobotController rc) throws GameActionException {
-        MapLocation tower = findNearestPaintTower(rc);
+        MapLocation myLoc = rc.getLocation();
+        Team myTeam = rc.getTeam();
+
+        // First try POI system for global tower knowledge
+        MapLocation tower = POI.findNearestAllyPaintTower(myLoc, myTeam);
+
+        // Fall back to visible towers
+        if (tower == null) {
+            tower = findNearestPaintTower(rc);
+        }
+
         if (tower != null) {
             Nav.moveTo(rc, tower);
         } else {
@@ -64,20 +76,25 @@ public class Mopper {
         if (enemies.length < 2) return false;  // Only swing if hitting 2+
 
         // Check each direction for swing
-        for (Direction d : Globals.DIRECTIONS) {
-            if (rc.canMopSwing(d)) {
+        Direction[] dirs = Globals.DIRECTIONS;
+        MapLocation myLoc = rc.getLocation();
+        for (int d = dirs.length; --d >= 0;) {
+            Direction dir = dirs[d];
+            if (rc.canMopSwing(dir)) {
                 // Count enemies in swing arc
                 int count = 0;
-                MapLocation myLoc = rc.getLocation();
-                for (RobotInfo enemy : enemies) {
-                    // Swing hits 3 tiles in arc
-                    MapLocation[] swingTiles = getSwingTiles(myLoc, d);
-                    for (MapLocation tile : swingTiles) {
-                        if (enemy.getLocation().equals(tile)) count++;
+                MapLocation[] swingTiles = getSwingTiles(myLoc, dir);
+                for (int e = enemies.length; --e >= 0;) {
+                    MapLocation enemyLoc = enemies[e].getLocation();
+                    for (int t = swingTiles.length; --t >= 0;) {
+                        if (enemyLoc.equals(swingTiles[t])) {
+                            count++;
+                            break;
+                        }
                     }
                 }
                 if (count >= 2) {
-                    rc.mopSwing(d);
+                    rc.mopSwing(dir);
                     return true;
                 }
             }
@@ -99,21 +116,16 @@ public class Mopper {
      */
     private static boolean tryMopPaint(RobotController rc) throws GameActionException {
         MapInfo[] nearby = rc.senseNearbyMapInfos(2);  // Mop range = 2
-        MapLocation best = null;
 
-        for (MapInfo info : nearby) {
+        for (int i = nearby.length; --i >= 0;) {
+            MapInfo info = nearby[i];
             if (info.getPaint().isEnemy()) {
                 MapLocation loc = info.getMapLocation();
                 if (rc.canAttack(loc)) {
-                    best = loc;
-                    break;  // Take first enemy paint tile
+                    rc.attack(loc);
+                    return true;
                 }
             }
-        }
-
-        if (best != null) {
-            rc.attack(best);
-            return true;
         }
         return false;
     }
@@ -129,12 +141,14 @@ public class Mopper {
         RobotInfo neediest = null;
         int lowestPaint = Integer.MAX_VALUE;
 
-        for (RobotInfo ally : allies) {
+        for (int i = allies.length; --i >= 0;) {
+            RobotInfo ally = allies[i];
             // Only transfer to mobile units (not towers)
             if (ally.getType().isTowerType()) continue;
 
-            if (ally.getPaintAmount() < lowestPaint && ally.getPaintAmount() < 50) {
-                lowestPaint = ally.getPaintAmount();
+            int paintAmt = ally.getPaintAmount();
+            if (paintAmt < lowestPaint && paintAmt < 50) {
+                lowestPaint = paintAmt;
                 neediest = ally;
             }
         }
@@ -156,15 +170,18 @@ public class Mopper {
         Direction bestDir = null;
         int bestScore = Integer.MIN_VALUE;
 
-        for (Direction d : Globals.DIRECTIONS) {
+        Direction[] dirs = Globals.DIRECTIONS;
+        Team myTeam = rc.getTeam();
+        for (int i = dirs.length; --i >= 0;) {
+            Direction d = dirs[i];
             if (!rc.canMove(d)) continue;
 
             MapLocation newLoc = myLoc.add(d);
             int score = 0;
 
             // Score by work available
-            for (Direction d2 : Globals.DIRECTIONS) {
-                MapLocation check = newLoc.add(d2);
+            for (int j = dirs.length; --j >= 0;) {
+                MapLocation check = newLoc.add(dirs[j]);
                 if (rc.canSenseLocation(check)) {
                     MapInfo info = rc.senseMapInfo(check);
                     if (info.getPaint().isEnemy()) score += 5;  // Enemy paint to mop
@@ -172,7 +189,7 @@ public class Mopper {
             }
 
             // Prefer being near allies (support role)
-            RobotInfo[] nearbyAllies = rc.senseNearbyRobots(newLoc, 4, rc.getTeam());
+            RobotInfo[] nearbyAllies = rc.senseNearbyRobots(newLoc, 4, myTeam);
             score += nearbyAllies.length;
 
             // Avoid dangerous tiles
@@ -198,10 +215,12 @@ public class Mopper {
         MapLocation best = null;
         int bestDist = Integer.MAX_VALUE;
 
-        for (RobotInfo ally : allies) {
-            if (ally.getType() == UnitType.LEVEL_ONE_PAINT_TOWER ||
-                ally.getType() == UnitType.LEVEL_TWO_PAINT_TOWER ||
-                ally.getType() == UnitType.LEVEL_THREE_PAINT_TOWER) {
+        for (int i = allies.length; --i >= 0;) {
+            RobotInfo ally = allies[i];
+            UnitType type = ally.getType();
+            if (type == UnitType.LEVEL_ONE_PAINT_TOWER ||
+                type == UnitType.LEVEL_TWO_PAINT_TOWER ||
+                type == UnitType.LEVEL_THREE_PAINT_TOWER) {
                 int dist = myLoc.distanceSquaredTo(ally.getLocation());
                 if (dist < bestDist) {
                     bestDist = dist;
