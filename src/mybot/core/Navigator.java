@@ -1,51 +1,48 @@
-package mybot;
+package mybot.core;
 
 import battlecode.common.*;
+import mybot.Utils;
+import mybot.Scoring;
 
 /**
- * Navigation utilities using improved Bug2 algorithm.
+ * Instance-based navigation using improved Bug2 algorithm.
+ * Each robot has its own Navigator instance for independent pathfinding.
  *
- * Improvements based on winning team strategies:
- * - PHASE 3: Paint-aware movement (prefer ally-painted tiles)
- * - PHASE 5: C-shape handling (direction reversal after timeout)
- * - PHASE 5: Left/right hand rule switching
+ * Features:
+ * - Paint-aware movement (prefer ally-painted tiles)
+ * - C-shape handling (direction reversal after timeout)
+ * - Left/right hand rule switching
  */
-public class Navigation {
+public class Navigator {
 
-    // Bug navigation state
-    private static MapLocation currentTarget = null;
-    private static boolean isTracing = false;
-    private static Direction tracingDir = null;
-    private static MapLocation lineStart = null;
-    private static int stuckCounter = 0;
+    private final RobotController rc;
 
-    // PHASE 5: C-shape handling
-    private static int tracingTurns = 0;
-    private static boolean useRightHand = true;  // Start with right-hand rule
-    private static final int DIRECTION_SWITCH_THRESHOLD = 15;  // Switch after N turns
+    // Bug navigation state (instance-based, not static)
+    private MapLocation currentTarget = null;
+    private boolean isTracing = false;
+    private Direction tracingDir = null;
+    private MapLocation lineStart = null;
+    private int stuckCounter = 0;
 
-    // Debug flag
-    private static final boolean DEBUG = false;
+    // C-shape handling
+    private int tracingTurns = 0;
+    private boolean useRightHand = true;
+    private static final int DIRECTION_SWITCH_THRESHOLD = 15;
+
+    /**
+     * Create a new Navigator for a robot.
+     */
+    public Navigator(RobotController rc) {
+        this.rc = rc;
+    }
 
     /**
      * Move toward a target location using improved Bug2 navigation.
-     * PAINT WAR FIX: Always tries to paint current tile after moving!
      * Returns true if movement occurred.
      */
-    public static boolean moveTo(RobotController rc, MapLocation target) throws GameActionException {
+    public boolean moveTo(MapLocation target) throws GameActionException {
         if (target == null) return false;
-        if (!rc.isMovementReady()) {
-            // Even if we can't move, try to paint our current tile to reduce damage
-            tryPaintAfterMove(rc);
-            if (DEBUG) {
-                int moveCool = rc.getMovementCooldownTurns();
-                int actionCool = rc.getActionCooldownTurns();
-                int paint = rc.getPaint();
-                System.out.println("[NAV #" + rc.getID() + " r" + rc.getRoundNum() +
-                    "] NOT READY move_cd=" + moveCool + " action_cd=" + actionCool + " paint=" + paint);
-            }
-            return false;
-        }
+        if (!rc.isMovementReady()) return false;
 
         MapLocation myLoc = rc.getLocation();
 
@@ -60,25 +57,23 @@ public class Navigation {
             lineStart = myLoc;
             stuckCounter = 0;
             tracingTurns = 0;
-            useRightHand = true;  // Reset to right-hand rule
+            useRightHand = true;
         }
 
         // Direct path toward target
         Direction targetDir = myLoc.directionTo(target);
 
         if (!isTracing) {
-            // PHASE 3: Try to move toward target, preferring painted tiles
-            Direction bestDir = findBestDirectionToward(rc, target);
+            // Try to move toward target, preferring painted tiles
+            Direction bestDir = findBestDirectionToward(target);
             if (bestDir != null && rc.canMove(bestDir)) {
                 rc.move(bestDir);
-                tryPaintAfterMove(rc);  // PAINT WAR FIX
                 return true;
             }
 
             // Fallback: try direct movement
             if (rc.canMove(targetDir)) {
                 rc.move(targetDir);
-                tryPaintAfterMove(rc);  // PAINT WAR FIX
                 return true;
             }
             // Try adjacent directions
@@ -86,25 +81,11 @@ public class Navigation {
             Direction right = targetDir.rotateRight();
             if (rc.canMove(left)) {
                 rc.move(left);
-                tryPaintAfterMove(rc);  // PAINT WAR FIX
                 return true;
             }
             if (rc.canMove(right)) {
                 rc.move(right);
-                tryPaintAfterMove(rc);  // PAINT WAR FIX
                 return true;
-            }
-
-            // Debug: log why we can't move
-            if (DEBUG) {
-                StringBuilder blocked = new StringBuilder();
-                for (Direction d : Direction.allDirections()) {
-                    if (!rc.canMove(d)) {
-                        blocked.append(d.name().charAt(0));
-                    }
-                }
-                System.out.println("[NAV #" + rc.getID() + " r" + rc.getRoundNum() +
-                    "] at " + myLoc + " can't reach " + target + " blocked:" + blocked);
             }
 
             // Start obstacle tracing
@@ -117,11 +98,10 @@ public class Navigation {
         if (isTracing) {
             tracingTurns++;
 
-            // PHASE 5: C-shape handling - switch direction after threshold
+            // C-shape handling - switch direction after threshold
             if (tracingTurns > DIRECTION_SWITCH_THRESHOLD) {
-                useRightHand = !useRightHand;  // Switch hand rule
+                useRightHand = !useRightHand;
                 tracingTurns = 0;
-                // Don't reset completely - just change direction
             }
 
             // Check if we've crossed the start-target line closer to target
@@ -129,7 +109,7 @@ public class Navigation {
                 myLoc.distanceSquaredTo(target) < lineStart.distanceSquaredTo(target)) {
                 isTracing = false;
                 tracingTurns = 0;
-                return moveTo(rc, target);
+                return moveTo(target);
             }
 
             // Follow obstacle using current hand rule
@@ -141,14 +121,12 @@ public class Navigation {
                 if (useRightHand) {
                     tryDir = tracingDir.rotateRight();
                 } else {
-                    tryDir = tracingDir.rotateLeft();  // Left-hand rule
+                    tryDir = tracingDir.rotateLeft();
                 }
 
                 if (rc.canMove(tryDir)) {
-                    // PHASE 3: Score by paint preference
                     MapLocation newLoc = myLoc.add(tryDir);
                     int score = Utils.scoreTile(rc, newLoc);
-                    // Also consider distance to target
                     score -= newLoc.distanceSquaredTo(target) / 10;
 
                     if (score > bestScore) {
@@ -166,7 +144,6 @@ public class Navigation {
 
             if (bestTraceDir != null) {
                 rc.move(bestTraceDir);
-                tryPaintAfterMove(rc);  // PAINT WAR FIX
                 if (useRightHand) {
                     tracingDir = bestTraceDir.rotateLeft().rotateLeft();
                 } else {
@@ -190,21 +167,15 @@ public class Navigation {
     }
 
     /**
-     * PHASE 3: Find the best direction toward target considering paint and combat.
-     * Uses SPAARK-style dynamic micro scoring for combat awareness.
-     * Returns null if no good direction found.
+     * Find the best direction toward target considering paint.
      */
-    private static Direction findBestDirectionToward(RobotController rc, MapLocation target) throws GameActionException {
+    private Direction findBestDirectionToward(MapLocation target) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         Direction targetDir = myLoc.directionTo(target);
 
         Direction bestDir = null;
         int bestScore = Integer.MIN_VALUE;
 
-        // Get movement cooldown for micro scoring
-        int cooldownTurns = rc.getMovementCooldownTurns();
-
-        // Check target direction and adjacent directions
         Direction[] tryDirs = {
             targetDir,
             targetDir.rotateLeft(),
@@ -217,18 +188,14 @@ public class Navigation {
             if (!rc.canMove(dir)) continue;
 
             MapLocation newLoc = myLoc.add(dir);
+            int score = Utils.scoreTile(rc, newLoc);
 
-            // Use dynamic micro scoring for combat awareness
-            int score = Scoring.scoreTileWithMicro(rc, newLoc, cooldownTurns);
-
-            // Strongly prefer directions that get us closer to target
             int distBefore = myLoc.distanceSquaredTo(target);
             int distAfter = newLoc.distanceSquaredTo(target);
             if (distAfter < distBefore) {
                 score += Scoring.WEIGHT_GETTING_CLOSER_BONUS;
             }
 
-            // Penalty for the non-direct directions
             if (dir != targetDir) {
                 score += Scoring.WEIGHT_NON_DIRECT_PENALTY;
             }
@@ -239,40 +206,35 @@ public class Navigation {
             }
         }
 
-        // Only return if we found something reasonable
         return (bestScore > -50) ? bestDir : null;
     }
 
     /**
      * Check if point is approximately on line between start and end.
      */
-    private static boolean isOnLine(MapLocation point, MapLocation start, MapLocation end) {
-        // Simplified check: within 2 tiles of the direct path
+    private boolean isOnLine(MapLocation point, MapLocation start, MapLocation end) {
         int dx = end.x - start.x;
         int dy = end.y - start.y;
         int px = point.x - start.x;
         int py = point.y - start.y;
 
-        // Cross product magnitude (area of parallelogram)
         int cross = Math.abs(dx * py - dy * px);
         int lineLength = (int) Math.sqrt(dx * dx + dy * dy);
 
         if (lineLength == 0) return point.equals(start);
 
-        // Distance from point to line
         return cross / lineLength <= 2;
     }
 
     /**
      * Move away from a location (flee behavior).
      */
-    public static boolean moveAway(RobotController rc, MapLocation threat) throws GameActionException {
+    public boolean moveAway(MapLocation threat) throws GameActionException {
         if (threat == null) return false;
         if (!rc.isMovementReady()) return false;
 
         Direction awayDir = rc.getLocation().directionTo(threat).opposite();
 
-        // Try away direction and adjacent
         if (rc.canMove(awayDir)) {
             rc.move(awayDir);
             return true;
@@ -290,43 +252,29 @@ public class Navigation {
     }
 
     /**
-     * Reset navigation state (call when switching targets).
+     * Reset navigation state.
      */
-    public static void reset() {
+    public void reset() {
         currentTarget = null;
         isTracing = false;
         tracingDir = null;
         lineStart = null;
         stuckCounter = 0;
+        tracingTurns = 0;
+        useRightHand = true;
     }
 
     /**
-     * PAINT WAR FIX: Paint the current tile after moving.
-     * This creates "paint trails" and reduces damage from standing on neutral/enemy paint.
-     *
-     * CONSERVATIVE: Only paint when we have LOTS of paint (>100) to avoid
-     * excessive retreats. Combat and building take priority.
+     * Get the current navigation target.
      */
-    private static void tryPaintAfterMove(RobotController rc) throws GameActionException {
-        // Skip if action not ready (just attacked something)
-        if (!rc.isActionReady()) return;
+    public MapLocation getTarget() {
+        return currentTarget;
+    }
 
-        // CONSERVATIVE: Only paint when paint is high (>100)
-        // This preserves paint for combat and prevents excessive retreats
-        if (rc.getPaint() < 100) return;
-
-        MapLocation myLoc = rc.getLocation();
-        MapInfo tile = rc.senseMapInfo(myLoc);
-
-        // Skip if already ally paint
-        if (tile.getPaint().isAlly()) return;
-
-        // Only paint NEUTRAL tiles - let splashers handle enemy paint
-        if (tile.getPaint().isEnemy()) return;
-
-        // Try to paint current tile
-        if (rc.canAttack(myLoc)) {
-            rc.attack(myLoc);
-        }
+    /**
+     * Check if currently tracing an obstacle.
+     */
+    public boolean isTracing() {
+        return isTracing;
     }
 }

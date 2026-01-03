@@ -1,6 +1,7 @@
 package mybot;
 
 import battlecode.common.*;
+import mybot.core.POI;
 
 /**
  * Communication system for coordinating robots.
@@ -31,7 +32,7 @@ public class Comms {
         ATTACK_TARGET,        // 12: Suggested attack target location
         RETREAT,              // 13: All units retreat to location
         ALL_CLEAR,            // 14: Threat cleared, resume normal ops
-        // Add more as needed (up to 15 types with 4 bits)
+        POI_TOWER,            // 15: POI tower info (payload: ally flag + chunk coords)
     }
 
     /**
@@ -231,6 +232,55 @@ public class Comms {
                 rc.sendMessage(ally.getLocation(), msg);
                 Metrics.trackMessageSent();
                 break;  // Units can only send 1 msg/turn
+            }
+        }
+    }
+
+    // ========== POI Message Helpers ==========
+
+    /**
+     * Broadcast tower discovery to nearby allies.
+     * @param towerLoc Location of the tower
+     * @param isAlly True if it's an ally tower
+     */
+    public static void broadcastTowerFound(RobotController rc, MapLocation towerLoc, boolean isAlly) throws GameActionException {
+        int round = rc.getRoundNum();
+        if (!POI.shouldBroadcast(round)) return;
+
+        int payload = POI.encodeTowerPayload(towerLoc, isAlly);
+        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+
+        for (RobotInfo ally : allies) {
+            if (rc.canSendMessage(ally.getLocation())) {
+                int msg = encode(MessageType.POI_TOWER, towerLoc, payload);
+                rc.sendMessage(ally.getLocation(), msg);
+                Metrics.trackMessageSent();
+                break;  // Units can only send 1 msg/turn
+            }
+        }
+        POI.recordBroadcast(round);
+    }
+
+    /**
+     * Process incoming POI messages and update POI state.
+     */
+    public static void processPOIMessages(RobotController rc) throws GameActionException {
+        Message[] messages = rc.readMessages(-1);
+        for (Message m : messages) {
+            int bytes = m.getBytes();
+            MessageType type = decodeType(bytes);
+
+            if (type == MessageType.POI_TOWER) {
+                MapLocation loc = decodeLocation(bytes);
+                int payload = decodePayload(bytes);
+                POI.decodeTowerPayload(payload, loc);
+            } else if (type == MessageType.RUIN_FOUND) {
+                MapLocation loc = decodeLocation(bytes);
+                POI.markRuin(loc, 1);  // Mark as unclaimed ruin
+            } else if (type == MessageType.TOWER_BUILT) {
+                MapLocation loc = decodeLocation(bytes);
+                POI.markRuin(loc, -1);  // Ruin now has tower
+                POI.markAllyTower(loc, 1);  // Mark tower in POI
             }
         }
     }

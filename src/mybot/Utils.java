@@ -209,6 +209,15 @@ public class Utils {
     }
 
     /**
+     * Check if this is a Money Tower type.
+     */
+    public static boolean isMoneyTower(UnitType type) {
+        return type == UnitType.LEVEL_ONE_MONEY_TOWER ||
+               type == UnitType.LEVEL_TWO_MONEY_TOWER ||
+               type == UnitType.LEVEL_THREE_MONEY_TOWER;
+    }
+
+    /**
      * Count enemy soldiers visible (for rush detection).
      */
     public static int countEnemySoldiers(RobotController rc) throws GameActionException {

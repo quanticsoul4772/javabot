@@ -1,6 +1,8 @@
 package mybot;
 
 import battlecode.common.*;
+import mybot.core.POI;
+import mybot.core.Symmetry;
 
 /**
  * Soldier behavior using Priority Chain Pattern.
@@ -11,7 +13,7 @@ import battlecode.common.*;
 public class Soldier {
 
     // ==================== DEBUG LOGGING ====================
-    private static final boolean DEBUG = true;  // Set to false for competition
+    private static final boolean DEBUG = false;  // Set to false for competition
 
     private static void log(RobotController rc, String prefix, String msg) {
         if (!DEBUG) return;
@@ -31,12 +33,27 @@ public class Soldier {
     private static MapLocation targetRuin = null;
     private static UnitType targetTowerType = null;  // Tower type being built
 
-    // Thresholds (tune these during competition)
-    // CRITICAL: In Battlecode 2025, paint=0 means CAN'T MOVE! Must retreat early.
-    private static final int HEALTH_CRITICAL = 15;  // Lower = fight longer
-    private static final int PAINT_LOW = 50;        // Raised! Need paint to reach tower
+    // Thresholds - SPAARK philosophy: "NEVER RETREAT!!!!!!!!"
+    // SPAARK only retreats when: paint<150 AND chips<6000 AND allies<9
+    // Key insight: Keep fighting, only retreat when truly desperate
+    private static final int HEALTH_CRITICAL = 15;  // Very low - keep fighting
+    private static final int PAINT_LOW = 50;        // Much lower - SPAARK fights at 50 paint
+    private static final int PAINT_MINIMUM = 5;     // ULTRA LOW - fight until empty!
     private static final int WEAK_ENEMY_HEALTH = 60; // Higher = target more enemies
     private static final int EARLY_GAME_ROUNDS = 100;
+
+    // SRP timing - SPAARK: SOL_MIN_SRP_ROUND = 50 (not 200!)
+    private static final int SRP_START_ROUND = 50;
+
+    // Builder limit - SPAARK: SOL_MAX_TOWER_BUILDING_SOLDIERS = 2
+    private static final int MAX_BUILDERS_PER_TOWER = 2;
+
+    // SPAARK retreat conditions - exit retreat when ANY is true:
+    // ULTRA AGGRESSIVE: Get back to fighting ASAP
+    // Soldier max paint = 200, so 30 = 15% remaining (enough for 3 attacks)
+    private static final int RETREAT_PAINT_THRESHOLD = 30;   // Exit retreat with 30 paint
+    private static final int RETREAT_CHIPS_THRESHOLD = 1500; // Even lower - fight more
+    private static final int RETREAT_ALLIES_THRESHOLD = 3;   // Fewer allies needed to fight
 
     // ==================== SPAWN LOCATION ====================
     private static MapLocation spawnLocation = null;  // Remember where we spawned
@@ -62,15 +79,10 @@ public class Soldier {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
 
-        // ===== DEBUG: Status every 25 rounds =====
-        if (DEBUG && round % 25 == 0) {
-            log(rc, "STATUS", "state=" + state + " paint=" + rc.getPaint() + " hp=" + rc.getHealth() +
-                " loc=" + myLoc + " target=" + targetRuin);
-        }
-
-        // ===== SPAWN LOCATION: Remember where we came from =====
+        // ===== SPAWN LOCATION: Remember where we came from (BEFORE any movement!) =====
         if (spawnLocation == null) {
-            RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+            // Find nearest ally tower as spawn location
+            RobotInfo[] allies = rc.senseNearbyRobots(8, rc.getTeam());
             for (RobotInfo ally : allies) {
                 if (ally.getType().isTowerType()) {
                     spawnLocation = ally.getLocation();
@@ -78,20 +90,66 @@ public class Soldier {
                 }
             }
             if (spawnLocation == null) {
-                spawnLocation = myLoc;
+                spawnLocation = myLoc;  // Fallback to current position
             }
+            POI.init(rc);       // Initialize POI system
+            Symmetry.init(rc);  // Initialize symmetry detection
         }
 
-        // ===== TRACK PAINT REFILL SUCCESS =====
+        // ===== ULTRA-FAST PATH: Early game (rounds 1-10) - minimal bytecode =====
+        // MUST be before complex logic to avoid bytecode overflow!
+        // BUT: Stay near spawn tower, don't wander randomly!
+        if (round <= 10) {
+            // Attack current tile to paint
+            if (rc.canAttack(myLoc)) {
+                rc.attack(myLoc);
+            }
+            // Move toward enemies if nearby, else stay near tower
+            RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+            if (enemies.length > 0) {
+                Direction toEnemy = myLoc.directionTo(enemies[0].getLocation());
+                if (rc.canMove(toEnemy)) {
+                    rc.move(toEnemy);
+                }
+            } else if (myLoc.distanceSquaredTo(spawnLocation) > 16) {
+                // Too far from tower, move back
+                Direction toSpawn = myLoc.directionTo(spawnLocation);
+                if (rc.canMove(toSpawn)) {
+                    rc.move(toSpawn);
+                }
+            } else {
+                // Stay near tower, just paint
+                Direction dir = Utils.DIRECTIONS[Utils.rng.nextInt(8)];
+                if (rc.canMove(dir) && myLoc.add(dir).distanceSquaredTo(spawnLocation) <= 16) {
+                    rc.move(dir);
+                }
+            }
+            return;
+        }
+
+        // ===== POI & SYMMETRY: Lightweight updates (skip early game for bytecode) =====
+        // Only run expensive sensing after round 15 to avoid bytecode issues
+        if (round > 15 && round % 3 == 0) {  // Every 3rd round after r15
+            POI.updateFromSensors(rc);
+        }
+        if (round > 10) {
+            Comms.processPOIMessages(rc);
+        }
+
+        // ===== TRACK PAINT REFILL SUCCESS (skip first 5 rounds) =====
         int currentPaint = rc.getPaint();
-        if (currentPaint > lastPaintLevel + 20) {
+        if (round > 5 && currentPaint > lastPaintLevel + 20) {
             Metrics.trackRetreatOutcome("success");
         }
         lastPaintLevel = currentPaint;
 
-        // ===== METRICS: Periodic self-report =====
-        if (Metrics.ENABLED && round % 500 == 0) {
-            Metrics.reportSoldierStats(rc.getID(), round);
+        // ===== METRICS: Frequent early game reports (every 25 rounds until r200) =====
+        if (Metrics.ENABLED) {
+            if (round <= 200 && round % 25 == 0) {
+                Metrics.reportEarlyGame(round, rc.getID(), "SOLDIER");
+            } else if (round % 100 == 0) {
+                Metrics.reportSoldierStats(rc.getID(), round);
+            }
         }
 
         // ==================== FSM UPDATE ====================
@@ -99,6 +157,19 @@ public class Soldier {
 
         // Check state exit conditions (cheap checks first)
         updateStateTransitions(rc);
+
+        // BUILDING_TOWER: Exit state if under heavy attack (2+ enemies nearby)
+        // Let the priority chain handle combat instead of being stuck building
+        if (state == SoldierState.BUILDING_TOWER) {
+            RobotInfo[] nearbyEnemies = rc.senseNearbyRobots(16, rc.getTeam().opponent());
+            if (nearbyEnemies.length >= 2) {
+                state = SoldierState.IDLE;
+                targetRuin = null;
+                targetTowerType = null;
+                rc.setIndicatorString("EXIT BUILDING - COMBAT!");
+                // Fall through to priority chain for combat
+            }
+        }
 
         // If in active state, execute it and return
         if (state != SoldierState.IDLE) {
@@ -108,21 +179,23 @@ public class Soldier {
 
         // ==================== PRIORITY CHAIN (when IDLE) ====================
 
-        // ===== PHASE CHECK =====
-        boolean defendMode = Comms.hasMessageOfType(rc, Comms.MessageType.PHASE_DEFEND);
-        boolean attackMode = Comms.hasMessageOfType(rc, Comms.MessageType.PHASE_ALL_OUT_ATTACK);
-
-        // Adjust thresholds based on phase
+        // ===== PHASE CHECK (skip early rounds to save bytecode) =====
         int healthThreshold = HEALTH_CRITICAL;
         int paintThreshold = PAINT_LOW;
-        if (defendMode) {
-            // In defend mode, retreat earlier to preserve units
-            healthThreshold = HEALTH_CRITICAL + 10;  // 30 instead of 20
-            paintThreshold = PAINT_LOW + 20;         // 70 instead of 50
-        } else if (attackMode) {
-            // In attack mode, be more aggressive
-            healthThreshold = HEALTH_CRITICAL - 5;   // 15 instead of 20
-            paintThreshold = PAINT_LOW - 20;         // 30 instead of 50
+
+        // Only read messages after round 10 (saves bytecode early game)
+        if (round > 10) {
+            boolean defendMode = Comms.hasMessageOfType(rc, Comms.MessageType.PHASE_DEFEND);
+            if (defendMode) {
+                healthThreshold = HEALTH_CRITICAL + 10;
+                paintThreshold = PAINT_LOW + 20;
+            } else {
+                boolean attackMode = Comms.hasMessageOfType(rc, Comms.MessageType.PHASE_ALL_OUT_ATTACK);
+                if (attackMode) {
+                    healthThreshold = HEALTH_CRITICAL - 5;
+                    paintThreshold = PAINT_LOW - 20;
+                }
+            }
         }
 
         // ===== PRIORITY 0: SURVIVAL =====
@@ -134,34 +207,30 @@ public class Soldier {
             return;
         }
 
-        // ===== PRIORITY 0.5: PAINT TOWER CRITICAL =====
-        MapLocation criticalTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_CRITICAL);
-        if (criticalTower != null) {
-            Metrics.trackSoldierPriority(0);
-            rc.setIndicatorString("P0.5: TOWER CRITICAL - DEFENDING!");
-            rc.setIndicatorLine(myLoc, criticalTower, 255, 0, 0);
-            Navigation.moveTo(rc, criticalTower);
-            // Attack enemies near the tower
-            RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
-            for (RobotInfo enemy : enemies) {
-                if (rc.canAttack(enemy.getLocation())) {
-                    rc.attack(enemy.getLocation());
-                    break;
+        // ===== PRIORITY 0.5-1.5: MESSAGE-BASED ACTIONS (skip early rounds) =====
+        // Skip message processing in early game to save bytecode
+        if (round > 10) {
+            // PRIORITY 0.5: PAINT TOWER CRITICAL
+            MapLocation criticalTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_CRITICAL);
+            if (criticalTower != null) {
+                Metrics.trackSoldierPriority(0);
+                rc.setIndicatorString("P0.5: TOWER CRITICAL!");
+                Navigation.moveTo(rc, criticalTower);
+                RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+                for (RobotInfo enemy : enemies) {
+                    if (rc.canAttack(enemy.getLocation())) {
+                        rc.attack(enemy.getLocation());
+                        break;
+                    }
                 }
+                return;
             }
-            return;
-        }
 
-        // ===== PRIORITY 1: COORDINATED ATTACK (focus fire) =====
-        MapLocation attackTarget = Comms.getLocationFromMessage(rc, Comms.MessageType.ATTACK_TARGET);
-        if (attackTarget != null) {
-            int dist = myLoc.distanceSquaredTo(attackTarget);
-            if (dist <= 100) {  // Within 10 tiles
+            // PRIORITY 1: COORDINATED ATTACK (focus fire)
+            MapLocation attackTarget = Comms.getLocationFromMessage(rc, Comms.MessageType.ATTACK_TARGET);
+            if (attackTarget != null && myLoc.distanceSquaredTo(attackTarget) <= 100) {
                 Metrics.trackSoldierPriority(1);
-                Metrics.trackMessageActedOn();
                 rc.setIndicatorString("P1: FOCUS FIRE!");
-                rc.setIndicatorLine(myLoc, attackTarget, 255, 0, 255);
-
                 if (rc.canAttack(attackTarget)) {
                     rc.attack(attackTarget);
                     Metrics.trackAttack();
@@ -169,83 +238,41 @@ public class Soldier {
                 Navigation.moveTo(rc, attackTarget);
                 return;
             }
-        }
 
-        // ===== PRIORITY 1.5: CRITICAL ALERTS (from communication) =====
-        MapLocation alertedTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_DANGER);
-        if (alertedTower != null) {
-            Metrics.trackSoldierPriority(1);
-            Metrics.trackMessageActedOn();
-            rc.setIndicatorString("P1: Responding to tower alert!");
-            Navigation.moveTo(rc, alertedTower);
-            Utils.tryPaintCurrent(rc);
-            return;
-        }
-
-        // ===== PRIORITY 2: DEFEND PAINT TOWERS =====
-        RobotInfo towerUnderAttack = Utils.findPaintTowerUnderAttack(rc);
-        if (towerUnderAttack != null) {
-            Metrics.trackSoldierPriority(2);
-            enterState(SoldierState.DEFENDING_TOWER, towerUnderAttack.getLocation(), round);
-            defendPaintTower(rc, towerUnderAttack);
-            return;
-        }
-
-        // ===== PRIORITY 3: RESUPPLY =====
-        if (rc.getPaint() < paintThreshold) {
-            logPrio(rc, 3, "RETREAT paint=" + rc.getPaint() + " < threshold=" + paintThreshold);
-            Metrics.trackSoldierPriority(3);
-            Metrics.trackLowPaint();
-            enterState(SoldierState.RETREATING, null, round);
-            retreatForPaint(rc);
-            return;
-        }
-
-        // ===== PRIORITY 3.5: BUILD SRP (economy boost) =====
-        // SRPs boost income: income = (20 + 3*#SRPs) * #MoneyTowers
-        if (round > 200 && rc.getPaint() > 100) {  // Mid-game with good paint
-            // Continue existing SRP build
-            if (state == SoldierState.BUILDING_SRP && targetSRP != null) {
-                handleSRPBuilding(rc, targetSRP);
+            // PRIORITY 1.5: TOWER DANGER ALERTS
+            MapLocation alertedTower = Comms.getLocationFromMessage(rc, Comms.MessageType.PAINT_TOWER_DANGER);
+            if (alertedTower != null) {
+                Metrics.trackSoldierPriority(1);
+                rc.setIndicatorString("P1.5: Tower alert!");
+                Navigation.moveTo(rc, alertedTower);
+                Utils.tryPaintCurrent(rc);
                 return;
             }
+        } // End of round > 10 message processing block
 
-            // Find new SRP location
-            MapLocation srpLoc = findSRPLocation(rc);
-            if (srpLoc != null) {
-                System.out.println("[SRP] Soldier #" + rc.getID() + " starting SRP at " + srpLoc);
-                Metrics.trackSRPAttempt();
-                targetSRP = srpLoc;
-                enterState(SoldierState.BUILDING_SRP, srpLoc, round);
-                handleSRPBuilding(rc, srpLoc);
+        // ===== PRIORITY 2: DEFEND PAINT TOWERS (skip early rounds) =====
+        // Skip expensive tower defense check in early game to save bytecode
+        if (round > 15) {
+            RobotInfo towerUnderAttack = Utils.findPaintTowerUnderAttack(rc);
+            if (towerUnderAttack != null) {
+                Metrics.trackSoldierPriority(2);
+                enterState(SoldierState.DEFENDING_TOWER, towerUnderAttack.getLocation(), round);
+                defendPaintTower(rc, towerUnderAttack);
                 return;
             }
         }
 
-        // ===== PRIORITY 4: OPPORTUNISTIC KILLS =====
-        RobotInfo weakEnemy = findWeakEnemy(rc);
-        if (weakEnemy != null && canKill(rc, weakEnemy)) {
-            Metrics.trackSoldierPriority(4);
-            rc.setIndicatorString("P4: Finishing weak enemy!");
-            if (rc.canAttack(weakEnemy.getLocation())) {
-                rc.attack(weakEnemy.getLocation());
-                Metrics.trackAttack();
-            }
-            Navigation.moveTo(rc, weakEnemy.getLocation());
-            return;
-        }
-
-        // ===== PRIORITY 4.5: HUNT ENEMY TOWERS =====
+        // ===== PRIORITY 3: HUNT ENEMY TOWERS (HIGHEST COMBAT PRIORITY!) =====
+        // SPAARK wins by destroying our towers - we must destroy theirs FIRST!
+        // Check for enemy towers BEFORE any other combat logic
         RobotInfo[] allEnemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+
         for (RobotInfo enemy : allEnemies) {
-            if (Utils.isPaintTower(enemy.getType())) {
-                Metrics.trackSoldierPriority(4);
-                rc.setIndicatorString("P4.5: HUNTING ENEMY TOWER!");
+            if (enemy.getType().isTowerType()) {
+                Metrics.trackSoldierPriority(3);
+                rc.setIndicatorString("P3: ATTACKING ENEMY TOWER!");
                 rc.setIndicatorLine(myLoc, enemy.getLocation(), 255, 0, 0);
-
-                // Broadcast to coordinate attack
                 Comms.broadcastAttackTarget(rc, enemy.getLocation());
-
                 if (rc.canAttack(enemy.getLocation())) {
                     rc.attack(enemy.getLocation());
                     Metrics.trackAttack();
@@ -255,27 +282,62 @@ public class Soldier {
             }
         }
 
-        // ===== PRIORITY 5: EARLY GAME / RUSH DEFENSE =====
-        boolean rushAlert = Comms.hasMessageOfType(rc, Comms.MessageType.RUSH_ALERT);
-        if (round < EARLY_GAME_ROUNDS || rushAlert) {
-            RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
-            if (enemies.length > 0) {
-                Metrics.trackSoldierPriority(5);
-                rc.setIndicatorString("P5: Early game defense!");
-                engageEnemy(rc, Utils.closestRobot(myLoc, enemies));
-                return;
-            }
-            // Stay near base
-            RobotInfo nearestTower = Utils.findNearestPaintTower(rc);
-            if (nearestTower != null && myLoc.distanceSquaredTo(nearestTower.getLocation()) > 100) {
-                Metrics.trackSoldierPriority(5);
-                Navigation.moveTo(rc, nearestTower.getLocation());
-                Utils.tryPaintCurrent(rc);
+        // ===== PRIORITY 3.5: RESUPPLY =====
+        // Retreat when paint is very low (can only do 1 more attack)
+        // Attack costs ~10 paint, so retreat at < 10
+        int myPaint = rc.getPaint();
+        if (myPaint < 10) {
+            Metrics.trackSoldierPriority(3);
+            enterState(SoldierState.RETREATING, null, round);
+            retreatForPaint(rc);
+            return;
+        }
+
+        // ===== PRIORITY 4: FIGHT VISIBLE ENEMIES =====
+        // Engage any visible enemies (after tower hunting)
+        if (allEnemies.length > 0) {
+            RobotInfo closestEnemy = Utils.closestRobot(myLoc, allEnemies);
+            if (closestEnemy != null) {
+                Metrics.trackSoldierPriority(4);
+                rc.setIndicatorString("P4: COMBAT!");
+                engageEnemy(rc, closestEnemy);
                 return;
             }
         }
 
-        // ===== PRIORITY 5.5: RUIN DENIAL =====
+        // ===== PRIORITY 4.5: PUSH TOWARD ENEMY BASE =====
+        // After round 30: Start pushing toward enemy to find and kill their units/towers!
+        // AGGRESSIVE: The best defense is a good offense
+        if (round >= 30) {
+            MapLocation enemyBase = Symmetry.predictEnemySpawn(spawnLocation);
+            if (enemyBase != null && myLoc.distanceSquaredTo(enemyBase) > 25) {
+                Metrics.trackSoldierPriority(4);
+                rc.setIndicatorString("P4.5: PUSHING TO ENEMY BASE!");
+                Navigation.moveTo(rc, enemyBase);
+                return;
+            }
+        }
+
+        // ===== PRIORITY 5: TOWER BUILDING =====
+        // STRATEGIC: Only build towers AFTER round 50 when we have splashers to help
+        if (round >= 50) {
+            MapLocation[] ruins = rc.senseNearbyRuins(-1);
+            if (DEBUG && ruins.length > 0) {
+                log(rc, "TOWER", "found " + ruins.length + " ruins, paint=" + rc.getPaint());
+            }
+            MapLocation bestRuin = findBuildableRuin(rc, ruins);
+            if (bestRuin != null) {
+                logPrio(rc, 5, "starting tower at " + bestRuin + " paint=" + rc.getPaint());
+                Metrics.trackSoldierPriority(5);
+                Metrics.trackTowerAttempt();
+                targetRuin = bestRuin;
+                enterState(SoldierState.BUILDING_TOWER, bestRuin, round);
+                handleTowerBuilding(rc, bestRuin);
+                return;
+            }
+        }
+
+        // ===== PRIORITY 6: RUIN DENIAL =====
         // Paint empty ruins to deny enemy tower construction
         MapLocation[] nearbyRuins = rc.senseNearbyRuins(-1);
         for (MapLocation ruin : nearbyRuins) {
@@ -294,43 +356,34 @@ public class Soldier {
 
                 // Paint to deny enemy
                 if (!ruinInfo.getPaint().isAlly() && rc.canAttack(ruin)) {
-                    Metrics.trackSoldierPriority(5);
+                    Metrics.trackSoldierPriority(6);
                     Metrics.trackRuinDenied();
                     rc.attack(ruin);
-                    rc.setIndicatorString("P5.5: Denying ruin!");
+                    rc.setIndicatorString("P6: Denying ruin!");
                     rc.setIndicatorDot(ruin, 255, 165, 0);
                     return;
                 }
             }
         }
 
-        // ===== PRIORITY 6: TOWER BUILDING =====
-        MapLocation[] ruins = rc.senseNearbyRuins(-1);
-        if (DEBUG && ruins.length > 0) {
-            log(rc, "TOWER", "found " + ruins.length + " ruins, paint=" + rc.getPaint());
-        }
-        MapLocation bestRuin = findBuildableRuin(rc, ruins);
-        if (bestRuin != null) {
-            logPrio(rc, 6, "starting tower at " + bestRuin + " paint=" + rc.getPaint());
-            Metrics.trackSoldierPriority(6);
-            Metrics.trackTowerAttempt();  // Track attempt for TowerSuccess metric
-            targetRuin = bestRuin;
-            enterState(SoldierState.BUILDING_TOWER, bestRuin, round);
-            handleTowerBuilding(rc, bestRuin);
-            return;
-        }
+        // ===== PRIORITY 7: BUILD SRP (economy boost) =====
+        // SRPs boost income: income = (20 + 3*#SRPs) * #MoneyTowers
+        // SPAARK: SOL_MIN_SRP_ROUND = 50 (economy boost early!)
+        if (round > SRP_START_ROUND && rc.getPaint() > 100) {  // Earlier SRP building
+            // Continue existing SRP build
+            if (state == SoldierState.BUILDING_SRP && targetSRP != null) {
+                handleSRPBuilding(rc, targetSRP);
+                return;
+            }
 
-        // ===== PRIORITY 7: COMBAT (threat-based targeting) =====
-        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
-        if (enemies.length > 0) {
-            // Use threat-based targeting for intelligent combat
-            RobotInfo target = Utils.findHighestThreat(rc, enemies);
-            if (target != null) {
-                Metrics.trackSoldierPriority(7);
-                Comms.reportEnemy(rc, target.getLocation(), enemies.length);
-                // Broadcast for focus fire coordination
-                Comms.broadcastAttackTarget(rc, target.getLocation());
-                engageEnemy(rc, target);
+            // Find new SRP location
+            MapLocation srpLoc = findSRPLocation(rc);
+            if (srpLoc != null) {
+                System.out.println("[SRP] Soldier #" + rc.getID() + " starting SRP at " + srpLoc);
+                Metrics.trackSRPAttempt();
+                targetSRP = srpLoc;
+                enterState(SoldierState.BUILDING_SRP, srpLoc, round);
+                handleSRPBuilding(rc, srpLoc);
                 return;
             }
         }
@@ -610,15 +663,17 @@ public class Soldier {
     }
 
     /**
-     * Find a ruin without a tower.
+     * Find a ruin without a tower AND without enemy paint on pattern tiles.
+     * Soldiers can only paint EMPTY tiles, not enemy paint!
+     * SPAARK limits to MAX_BUILDERS_PER_TOWER (2) soldiers per ruin.
      */
     private static MapLocation findBuildableRuin(RobotController rc, MapLocation[] ruins) throws GameActionException {
         if (ruins == null || ruins.length == 0) return null;
 
         // Only start tower building if we have reasonable paint
-        // Building pattern costs ~50 paint, need buffer for movement
+        // Lowered from 80 to 40: soldiers will make more trips but keep building
         int currentPaint = rc.getPaint();
-        if (currentPaint < 80) {
+        if (currentPaint < 40) {
             return null;  // Not enough paint to build
         }
 
@@ -626,9 +681,48 @@ public class Soldier {
         MapLocation best = null;
         int bestDist = Integer.MAX_VALUE;
 
+        // Sense nearby ally soldiers to enforce builder limit
+        RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+
         for (MapLocation ruin : ruins) {
             RobotInfo robot = rc.senseRobotAtLocation(ruin);
             if (robot != null) continue;
+
+            // SPAARK-inspired: Limit builders per tower to MAX_BUILDERS_PER_TOWER
+            // Count ally soldiers near this ruin (within build range ~8)
+            int buildersAtRuin = 0;
+            for (RobotInfo ally : allies) {
+                if (ally.getType() == UnitType.SOLDIER) {
+                    int allyDistToRuin = ally.getLocation().distanceSquaredTo(ruin);
+                    if (allyDistToRuin <= 8) {  // Within build range
+                        buildersAtRuin++;
+                    }
+                }
+            }
+            // Skip if already at builder limit (unless we're already building here)
+            if (buildersAtRuin >= MAX_BUILDERS_PER_TOWER &&
+                (targetRuin == null || !targetRuin.equals(ruin))) {
+                if (DEBUG) log(rc, "TOWER", "skipping ruin at " + ruin + " - " + buildersAtRuin + " builders");
+                continue;
+            }
+
+            // Check for enemy paint on pattern tiles (soldiers can't paint over it!)
+            // Pattern is 5x5 around the ruin center
+            int enemyPaintCount = 0;
+            MapInfo[] patternTiles = rc.senseNearbyMapInfos(ruin, 8);  // 5x5 = radius 2.8 -> squared = 8
+            for (MapInfo tile : patternTiles) {
+                if (tile.getPaint().isEnemy()) {
+                    enemyPaintCount++;
+                }
+            }
+
+            // Skip ruins with ANY enemy paint - soldiers can't complete without splashers!
+            // Even 1-2 enemy tiles can block tower completion indefinitely.
+            // Better to find a clean ruin than waste time on a blocked one.
+            if (enemyPaintCount > 0) {
+                if (DEBUG) log(rc, "TOWER", "skipping ruin at " + ruin + " - " + enemyPaintCount + " enemy tiles");
+                continue;
+            }
 
             int dist = myLoc.distanceSquaredTo(ruin);
             if (dist < bestDist) {
@@ -645,6 +739,33 @@ public class Soldier {
      */
     private static void handleTowerBuilding(RobotController rc, MapLocation ruin) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
+        int dist = myLoc.distanceSquaredTo(ruin);
+        int myPaint = rc.getPaint();
+        int round = rc.getRoundNum();
+
+        // PRIORITY: Complete tower building if we're close (dist < 4)
+        // A new tower is worth more than fighting a few enemies
+        // Only abandon building if we're far away or enemies are very numerous
+        RobotInfo[] enemies = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        if (enemies.length >= 3 && dist > 4) {
+            // Too many enemies and we're far from ruin - abandon and defend
+            state = SoldierState.IDLE;
+            targetRuin = null;
+            targetTowerType = null;
+            RobotInfo closestEnemy = Utils.closestRobot(myLoc, enemies);
+            if (closestEnemy != null) {
+                rc.setIndicatorString("DEFEND! Abandoning distant build");
+                engageEnemy(rc, closestEnemy);
+            }
+            return;
+        }
+        // If close to ruin (dist < 4), continue building even with enemies
+
+        // DEBUG: Track tower building attempts
+        if (Metrics.ENABLED) {
+            System.out.println("[BUILDING #" + rc.getID() + " r" + rc.getRoundNum() + "] " +
+                "ruin=" + ruin + " dist=" + dist + " paint=" + myPaint);
+        }
 
         // Choose tower type if not already set
         if (targetTowerType == null) {
@@ -656,11 +777,70 @@ public class Soldier {
         rc.setIndicatorString("P6: Building " + towerName + " at " + ruin);
         rc.setIndicatorLine(myLoc, ruin, 0, 255, 0);
 
-        // CRITICAL: In Battlecode 2025, units with paint=0 CANNOT MOVE!
-        // Must retreat with enough paint to actually reach a tower.
-        // Need ~50 paint: movement costs + paint drain + buffer
-        if (rc.getPaint() < 50) {
-            log(rc, "TOWER", "LOW PAINT=" + rc.getPaint() + " -> RETREATING state (need 50+)");
+        // Alert splashers to help clear enemy paint on pattern tiles
+        Comms.broadcastToAllies(rc, Comms.MessageType.TOWER_BUILDING, ruin, 0);
+
+        // Move toward ruin if too far
+        if (myLoc.distanceSquaredTo(ruin) > 2) {
+            Navigation.moveTo(rc, ruin);
+            Utils.tryPaintCurrent(rc);
+            return;
+        }
+
+        // CRITICAL: Mark pattern FIRST before counting tiles!
+        // Otherwise tilesRemaining=0 because no tiles are marked yet.
+        if (rc.canMarkTowerPattern(targetTowerType, ruin)) {
+            rc.markTowerPattern(targetTowerType, ruin);
+            if (Metrics.ENABLED) {
+                System.out.println("[MARKED #" + rc.getID() + " r" + rc.getRoundNum() + "] " +
+                    "pattern marked for " + targetTowerType + " at " + ruin);
+            }
+        }
+
+        // NOW count how many tiles still need painting (after marking!)
+        MapInfo[] preCheckTiles = rc.senseNearbyMapInfos(ruin, 8);
+        int tilesRemaining = 0;
+        int tilesEnemyBlocked = 0;
+        for (MapInfo tile : preCheckTiles) {
+            PaintType mark = tile.getMark();
+            PaintType paint = tile.getPaint();
+            if (mark != PaintType.EMPTY && mark != paint) {
+                if (paint.isEnemy()) {
+                    tilesEnemyBlocked++;
+                } else {
+                    tilesRemaining++;
+                }
+            }
+        }
+
+        // Calculate paint threshold - ULTRA AGGRESSIVE to complete patterns!
+        // Problem: Soldiers need ~22 tiles, can paint ~7/trip. With threshold=20, they retreat too early.
+        // Solution: Paint until nearly empty, then retreat.
+        int paintThreshold;
+        if (tilesRemaining <= 5) {
+            paintThreshold = 0;  // FINISH IT! Paint until completely empty
+        } else if (tilesRemaining <= 10) {
+            paintThreshold = 5;  // Very aggressive - keep painting
+        } else {
+            paintThreshold = 10; // Still aggressive - paint more per trip
+        }
+        // NO distance penalty - we want soldiers to commit to building
+
+        // DEBUG: Show pre-check status with threshold
+        if (Metrics.ENABLED && dist <= 2) {
+            System.out.println("[PRECHECK #" + rc.getID() + " r" + rc.getRoundNum() + "] " +
+                "dist=" + dist + " paint=" + myPaint + " tilesLeft=" + tilesRemaining +
+                " enemyBlocked=" + tilesEnemyBlocked + " threshold=" + paintThreshold);
+        }
+
+        // CRITICAL FIX: Even with threshold=0, if we have 0 paint we MUST retreat!
+        // Previous bug: soldier stuck at ruin with paint=0, tilesLeft=4, threshold=0 forever
+        boolean mustRetreat = (rc.getPaint() == 0 && tilesRemaining > 0) ||
+                              (rc.getPaint() < paintThreshold);
+
+        if (mustRetreat) {
+            log(rc, "TOWER", "LOW PAINT=" + rc.getPaint() + " threshold=" + paintThreshold +
+                " tilesLeft=" + tilesRemaining + " -> RETREATING");
             rc.setIndicatorString("P6: Low paint, switching to RETREAT");
             // CRITICAL: Change state so we don't loop back here!
             state = SoldierState.RETREATING;
@@ -671,46 +851,55 @@ public class Soldier {
             return;
         }
 
-        // Alert splashers to help clear enemy paint on pattern tiles
-        Comms.broadcastToAllies(rc, Comms.MessageType.TOWER_BUILDING, ruin, 0);
-
-        if (myLoc.distanceSquaredTo(ruin) > 2) {
-            Navigation.moveTo(rc, ruin);
-            Utils.tryPaintCurrent(rc);
-            return;
-        }
-
-        if (rc.canMarkTowerPattern(targetTowerType, ruin)) {
-            rc.markTowerPattern(targetTowerType, ruin);
+        // IMPORTANT: Paint the tile under ourselves FIRST to reduce paint drain damage!
+        // Standing on neutral/enemy paint costs health AND paint per turn
+        // BUT: Don't self-paint if we're almost done (<=3 tiles left) - prioritize pattern!
+        MapInfo currentTile = rc.senseMapInfo(myLoc);
+        if (!currentTile.getPaint().isAlly() && rc.canAttack(myLoc) && tilesRemaining > 3) {
+            if (Metrics.ENABLED) {
+                System.out.println("[SELF-PAINT #" + rc.getID() + " r" + rc.getRoundNum() + "] " +
+                    "painting self at " + myLoc + " tilesLeft=" + tilesRemaining);
+            }
+            rc.attack(myLoc);  // Paint ourselves to reduce damage
+            return;  // Continue building next turn
         }
 
         MapInfo[] patternTiles = rc.senseNearbyMapInfos(ruin, 8);
         int tilesNeedingPaint = 0;
         int tilesEnemyPaint = 0;
+        int tilesCorrect = 0;
         MapLocation tileToMoveTo = null;  // Track a tile we need to get closer to
 
         for (MapInfo tile : patternTiles) {
             PaintType mark = tile.getMark();
             PaintType paint = tile.getPaint();
 
-            if (mark != PaintType.EMPTY && mark != paint) {
-                tilesNeedingPaint++;
-                MapLocation tileLoc = tile.getMapLocation();
-
-                // Soldiers CAN'T paint over enemy paint - need splasher help
-                if (paint.isEnemy()) {
-                    tilesEnemyPaint++;
-                    continue;  // Skip enemy tiles
-                }
-
-                boolean secondary = (mark == PaintType.ALLY_SECONDARY);
-                if (rc.canAttack(tileLoc)) {
-                    rc.attack(tileLoc, secondary);
-                    return;
+            if (mark != PaintType.EMPTY) {
+                if (mark == paint) {
+                    tilesCorrect++;  // Already painted correctly
                 } else {
-                    // Can't attack - remember this tile to move towards it
-                    if (tileToMoveTo == null) {
-                        tileToMoveTo = tileLoc;
+                    tilesNeedingPaint++;
+                    MapLocation tileLoc = tile.getMapLocation();
+
+                    // Soldiers CAN'T paint over enemy paint - need splasher help
+                    if (paint.isEnemy()) {
+                        tilesEnemyPaint++;
+                        continue;  // Skip enemy tiles
+                    }
+
+                    boolean secondary = (mark == PaintType.ALLY_SECONDARY);
+                    if (rc.canAttack(tileLoc)) {
+                        if (Metrics.ENABLED) {
+                            System.out.println("[PAINT #" + rc.getID() + " r" + rc.getRoundNum() + "] " +
+                                "painting " + tileLoc + " correct=" + tilesCorrect + " need=" + tilesNeedingPaint);
+                        }
+                        rc.attack(tileLoc, secondary);
+                        return;
+                    } else {
+                        // Can't attack - remember this tile to move towards it
+                        if (tileToMoveTo == null) {
+                            tileToMoveTo = tileLoc;
+                        }
                     }
                 }
             }
@@ -730,6 +919,13 @@ public class Soldier {
 
         boolean canComplete = rc.canCompleteTowerPattern(targetTowerType, ruin);
 
+        // DEBUG: Show pattern status when we reach this point (all tiles either correct or unreachable)
+        if (Metrics.ENABLED) {
+            System.out.println("[PATTERN #" + rc.getID() + " r" + rc.getRoundNum() + "] " +
+                "ruin=" + ruin + " correct=" + tilesCorrect + " need=" + tilesNeedingPaint +
+                " enemy=" + tilesEnemyPaint + " canComplete=" + canComplete);
+        }
+
         if (canComplete) {
             rc.completeTowerPattern(targetTowerType, ruin);
             Metrics.trackTowerBuilt();
@@ -746,48 +942,85 @@ public class Soldier {
     }
 
     /**
-     * Default behavior: paint and explore.
-     * NOTE: Soldiers CANNOT paint over enemy paint - only splashers can!
-     * Focus on expanding into unpainted territory.
+     * AGGRESSIVE EXPANSION: Always push toward enemy territory!
+     * Key insight: To reach 70%, we must actively expand, not wander randomly.
      */
     private static void exploreAndPaint(RobotController rc) throws GameActionException {
         Utils.tryPaintCurrent(rc);
 
-        // Priority 1: Find unpainted tiles (real expansion)
-        MapLocation paintTarget = findUnpaintedTile(rc);
+        // ALWAYS push toward enemy territory - this is how we reach 70%!
+        MapLocation pushTarget = getPushTarget(rc);
+
+        // Priority 1: Find unpainted tiles IN THE PUSH DIRECTION
+        MapLocation paintTarget = findUnpaintedTileInDirection(rc, pushTarget);
         if (paintTarget != null) {
             Navigation.moveTo(rc, paintTarget);
             Utils.tryPaintCurrent(rc);
             Metrics.trackTileExpanded();
-            rc.setIndicatorString("P8: Expanding territory");
+            rc.setIndicatorString("P8: Pushing toward " + pushTarget);
             return;
         }
 
-        // Priority 2: Random exploration when no unpainted nearby
-        Utils.tryMoveRandom(rc);
+        // Priority 2: Just push forward even on ally paint
+        Navigation.moveTo(rc, pushTarget);
         Utils.tryPaintCurrent(rc);
         Metrics.trackTileExpanded();
-        rc.setIndicatorString("P8: Exploring");
+        rc.setIndicatorString("P8: Advancing to " + pushTarget);
     }
 
     /**
-     * Find nearest unpainted or enemy-painted tile.
+     * Calculate push direction (away from spawn toward enemy).
+     * Original logic that worked before POI/Symmetry changes.
      */
-    private static MapLocation findUnpaintedTile(RobotController rc) throws GameActionException {
+    private static MapLocation getPushTarget(RobotController rc) {
+        MapLocation myLoc = rc.getLocation();
+        int mapWidth = rc.getMapWidth();
+        int mapHeight = rc.getMapHeight();
+        MapLocation mapCenter = new MapLocation(mapWidth / 2, mapHeight / 2);
+
+        if (spawnLocation != null) {
+            int dx = myLoc.x - spawnLocation.x;
+            int dy = myLoc.y - spawnLocation.y;
+
+            // If haven't moved far from spawn, push toward center first
+            if (Math.abs(dx) < 3 && Math.abs(dy) < 3) {
+                return mapCenter;
+            }
+
+            // Push in that direction (away from base toward enemy)
+            int targetX = Math.min(mapWidth - 1, Math.max(0, myLoc.x + dx * 2));
+            int targetY = Math.min(mapHeight - 1, Math.max(0, myLoc.y + dy * 2));
+            return new MapLocation(targetX, targetY);
+        }
+
+        return mapCenter;
+    }
+
+    /**
+     * Find unpainted tile that is in the direction of our push target.
+     */
+    private static MapLocation findUnpaintedTileInDirection(RobotController rc, MapLocation pushTarget) throws GameActionException {
         MapInfo[] tiles = rc.senseNearbyMapInfos();
         MapLocation myLoc = rc.getLocation();
         MapLocation best = null;
-        int bestDist = Integer.MAX_VALUE;
+        int bestScore = Integer.MIN_VALUE;
 
         for (MapInfo tile : tiles) {
             if (!tile.isPassable()) continue;
 
             PaintType paint = tile.getPaint();
-            if (paint.isEnemy() || paint == PaintType.EMPTY) {
-                int dist = myLoc.distanceSquaredTo(tile.getMapLocation());
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = tile.getMapLocation();
+            // Only consider unpainted tiles (soldiers can't paint over enemy)
+            if (paint == PaintType.EMPTY) {
+                MapLocation loc = tile.getMapLocation();
+                int distToMe = myLoc.distanceSquaredTo(loc);
+                int distToPush = loc.distanceSquaredTo(pushTarget);
+
+                // Score: prefer tiles that are close AND in push direction
+                int score = 100 - distToMe - distToPush / 2;
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = loc;
                 }
             }
         }
@@ -850,8 +1083,8 @@ public class Soldier {
                             int afterPaint = rc.getPaint();
                             log(rc, "RETREAT", "TOOK " + canTake + " paint! Now have " + afterPaint);
                             rc.setIndicatorString("Refilled: " + afterPaint + " paint");
-                            // Exit retreat when we have enough paint to build (80+)
-                            if (afterPaint >= 80) {
+                            // SPAARK exits retreat at 150+ paint - stay healthy!
+                            if (afterPaint >= 150) {
                                 log(rc, "RETREAT", "Paint good (" + afterPaint + ") - resuming normal ops");
                                 state = SoldierState.IDLE;
                             }
@@ -859,14 +1092,17 @@ public class Soldier {
                         }
                     }
 
-                    // If tower has no paint, maybe find another tower nearby
-                    if (towerPaint < 15) {
-                        log(rc, "RETREAT", "Tower at " + towerLoc + " has low paint=" + towerPaint + ", waiting...");
+                    // If tower has no paint, don't wait forever!
+                    // Exit retreat with whatever paint we have if tower is depleted
+                    if (towerPaint < 15 && currentPaint >= PAINT_MINIMUM) {
+                        log(rc, "RETREAT", "Tower low paint=" + towerPaint + ", exiting with " + currentPaint);
+                        state = SoldierState.IDLE;
+                        return;
                     }
                 }
 
-                // If paint is enough to build, we can leave
-                if (currentPaint >= 80) {
+                // If paint is enough to fight (SPAARK uses 150), we can leave
+                if (currentPaint >= 150) {
                     log(rc, "RETREAT", "Paint refilled to " + currentPaint + ", exiting retreat");
                     state = SoldierState.IDLE;
                     return;
@@ -1003,8 +1239,8 @@ public class Soldier {
                     state = SoldierState.IDLE;
                     return;
                 }
-                // Exit if no more threats near the tower
-                if (Utils.findPaintTowerUnderAttack(rc) == null) {
+                // Exit if no more threats near the tower (only check every 5 turns to save bytecode)
+                if (stateTurns % 5 == 0 && Utils.findPaintTowerUnderAttack(rc) == null) {
                     state = SoldierState.IDLE;
                 }
                 break;
@@ -1014,8 +1250,14 @@ public class Soldier {
                     state = SoldierState.IDLE;
                     return;
                 }
-                // Need 120+ paint to be productive (tower building needs ~70)
-                if (rc.getHealth() > 50 && rc.getPaint() >= 120) {
+                // SPAARK exits retreat when ANY condition breaks:
+                // paint >= 150 OR chips >= 6000 OR allies >= 9
+                int money = rc.getMoney();
+                RobotInfo[] allies = rc.senseNearbyRobots(-1, rc.getTeam());
+                if (rc.getHealth() > 30 &&
+                    (rc.getPaint() >= RETREAT_PAINT_THRESHOLD ||
+                     money >= RETREAT_CHIPS_THRESHOLD ||
+                     allies.length >= RETREAT_ALLIES_THRESHOLD)) {
                     state = SoldierState.IDLE;
                 }
                 break;

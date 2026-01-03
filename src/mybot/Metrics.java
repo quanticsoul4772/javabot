@@ -10,7 +10,7 @@ package mybot;
 public class Metrics {
 
     // Feature toggle - set false for competition
-    public static final boolean ENABLED = true;
+    public static final boolean ENABLED = true;  // ENABLED for debugging!
 
     // ==================== PRIORITY TRACKING ====================
     // Soldier priorities P0-P8
@@ -404,6 +404,49 @@ public class Metrics {
         System.out.println("[MOPPER #" + robotId + " r" + round + "] " +
             "P2=" + mopperPriority[2] + " P4=" + mopperPriority[4] +
             " mops=" + mopSwings);
+    }
+
+    // ==================== EARLY GAME REPORTING ====================
+
+    /**
+     * Report early game status (call every 25 rounds for rounds 1-200).
+     * Critical for debugging since we lose around round 130.
+     */
+    public static void reportEarlyGame(int round, int robotId, String unitType) {
+        if (!ENABLED) return;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("[").append(unitType).append(" #").append(robotId);
+        sb.append(" r").append(round).append("] ");
+
+        // Priority chain usage
+        if (unitType.equals("SOLDIER")) {
+            sb.append("P0=").append(soldierPriority[0]);  // Survival
+            sb.append(" P3=").append(soldierPriority[3]);  // Resupply
+            sb.append(" P6=").append(soldierPriority[6]);  // Tower Building
+            sb.append(" P8=").append(soldierPriority[8]);  // Explore
+            sb.append(" atk=").append(attacksLanded);
+            sb.append(" twr=").append(towersBuilt).append("/").append(towerAttempts);
+        } else if (unitType.equals("TOWER")) {
+            sb.append("spawns=");
+            sb.append(unitSpawned[0]).append("S/");
+            sb.append(unitSpawned[2]).append("M/");
+            sb.append(unitSpawned[1]).append("X");  // X=splasher
+        }
+
+        System.out.println(sb.toString());
+    }
+
+    /**
+     * Compact status line for frequent updates.
+     */
+    public static void reportQuickStatus(int round) {
+        if (!ENABLED) return;
+        System.out.println("[r" + round + "] " +
+            "atk=" + attacksLanded +
+            " retreat=" + retreatsTriggered +
+            " twrBuilt=" + towersBuilt +
+            " tiles=" + tilesExpanded);
     }
 
     // ==================== GAME SUMMARY REPORTING ====================

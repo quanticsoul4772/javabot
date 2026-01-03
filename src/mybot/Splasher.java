@@ -144,17 +144,36 @@ public class Splasher {
             }
         }
 
-        // ===== PRIORITY 2: HIGH-VALUE SPLASH (5+ tiles) =====
-        MapLocation splashTarget = findBestSplashTarget(rc);
-        if (splashTarget != null) {
-            int score = Scoring.scoreSplashTarget(rc, splashTarget);
-            if (score >= Scoring.THRESHOLD_SPLASH_HIGH) {
-                Metrics.trackSplasherPriority(2);
-                if (!rc.canAttack(splashTarget)) {
-                    // Need to move to target - enter persistent state
-                    enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
+        // ===== PRIORITY 2: ADVANCE TO ENEMY TERRITORY (HIGHEST PRIORITY!) =====
+        // Splashers are the ONLY units that can contest enemy paint!
+        // PUSH FIRST, then splash once in enemy territory
+        MapLocation enemyTerritory = findEnemyTerritory(rc);
+        if (enemyTerritory != null) {
+            // Enemy paint visible - go contest it!
+            Metrics.trackSplasherPriority(2);
+            enterState(SplasherState.ADVANCING_TERRITORY, enemyTerritory);
+            rc.setIndicatorString("P2: CONTESTING enemy territory!");
+            rc.setIndicatorLine(myLoc, enemyTerritory, 255, 0, 128);
+            // Try to splash the enemy paint if in range
+            if (rc.canAttack(enemyTerritory)) {
+                MapInfo targetTile = rc.senseMapInfo(enemyTerritory);
+                if (targetTile.getPaint().isEnemy()) {
+                    Metrics.trackTileContested();
                 }
-                executeSplash(rc, splashTarget, score);
+                rc.attack(enemyTerritory);
+                Metrics.trackSplash();
+            }
+            Navigation.moveTo(rc, enemyTerritory);
+            return;
+        } else {
+            // No enemy paint visible - push toward enemy side of map
+            MapLocation pushTarget = getPushTarget(rc);
+            int distToPush = myLoc.distanceSquaredTo(pushTarget);
+            if (distToPush > 9) {  // Reduced from 25 - push more aggressively!
+                Metrics.trackSplasherPriority(2);
+                rc.setIndicatorString("P2: Pushing to " + pushTarget + " (dist=" + distToPush + ")");
+                rc.setIndicatorLine(myLoc, pushTarget, 128, 0, 255);
+                Navigation.moveTo(rc, pushTarget);
                 return;
             }
         }
@@ -171,27 +190,16 @@ public class Splasher {
             }
         }
 
-        // ===== PRIORITY 3: ADVANCE TO ENEMY TERRITORY =====
-        // Splashers are the ONLY units that can contest enemy paint!
-        // ALWAYS push forward, even when no enemy paint is visible yet
-        MapLocation enemyTerritory = findEnemyTerritory(rc);
-        if (enemyTerritory != null) {
-            // Enemy paint visible - go contest it!
-            Metrics.trackSplasherPriority(3);
-            enterState(SplasherState.ADVANCING_TERRITORY, enemyTerritory);
-            rc.setIndicatorString("P3: Contesting enemy territory!");
-            rc.setIndicatorLine(myLoc, enemyTerritory, 255, 0, 128);
-            Navigation.moveTo(rc, enemyTerritory);
-            return;
-        } else {
-            // No enemy paint visible - push toward enemy side of map
-            MapLocation pushTarget = getPushTarget(rc);
-            int distToPush = myLoc.distanceSquaredTo(pushTarget);
-            if (distToPush > 25) {  // Still have ground to cover
+        // ===== PRIORITY 3: HIGH-VALUE SPLASH (once near enemy territory) =====
+        MapLocation splashTarget = findBestSplashTarget(rc);
+        if (splashTarget != null) {
+            int score = Scoring.scoreSplashTarget(rc, splashTarget);
+            if (score >= Scoring.THRESHOLD_SPLASH_HIGH) {
                 Metrics.trackSplasherPriority(3);
-                rc.setIndicatorString("P3: Pushing forward to " + pushTarget);
-                rc.setIndicatorLine(myLoc, pushTarget, 128, 0, 255);
-                Navigation.moveTo(rc, pushTarget);
+                if (!rc.canAttack(splashTarget)) {
+                    enterState(SplasherState.MOVING_TO_SPLASH, splashTarget);
+                }
+                executeSplash(rc, splashTarget, score);
                 return;
             }
         }

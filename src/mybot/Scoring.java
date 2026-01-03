@@ -44,6 +44,12 @@ public class Scoring {
     public static final int WEIGHT_LOW_PAINT = -20;
     public static final int WEIGHT_FULL_RESOURCES = 5;
 
+    // ==================== DYNAMIC MICRO SCORING (SPAARK-style) ====================
+    // "5 micro = 1 paint" - each enemy in range costs 5 points per turn of cooldown
+    public static final int MICRO_ENEMY_PENALTY = 5;
+    public static final int MICRO_ATTACK_BONUS = 15;  // Bonus if we can attack from tile
+    public static final int MICRO_ALLY_SUPPORT = 3;   // Nearby allies reduce danger
+
     // ==================== THRESHOLDS ==================== (AGGRESSIVE)
     public static final int THRESHOLD_GOOD_TILE = 5;
     public static final int THRESHOLD_BAD_TILE = -10;
@@ -72,6 +78,41 @@ public class Scoring {
         } else {
             score += WEIGHT_NEUTRAL;
         }
+
+        return score;
+    }
+
+    /**
+     * Score a tile with dynamic micro penalties (SPAARK-style combat awareness).
+     * Optimized for low bytecode usage.
+     *
+     * @param rc The RobotController
+     * @param loc The tile to score
+     * @param cooldownTurns How many turns until we can move again
+     * @return The micro-adjusted score for this tile
+     */
+    public static int scoreTileWithMicro(RobotController rc, MapLocation loc,
+                                          int cooldownTurns) throws GameActionException {
+        // Start with base paint score
+        int score = scoreTile(rc, loc);
+
+        // SIMPLIFIED: Only check enemies within action range (20) for speed
+        // Skip if no cooldown concerns
+        if (cooldownTurns <= 0) return score;
+
+        RobotInfo[] enemies = rc.senseNearbyRobots(20, rc.getTeam().opponent());
+        if (enemies.length == 0) return score;
+
+        // Count enemies that can hit this tile (simplified: within range 16)
+        int enemiesNearTile = 0;
+        for (RobotInfo enemy : enemies) {
+            if (loc.distanceSquaredTo(enemy.getLocation()) <= 16) {
+                enemiesNearTile++;
+            }
+        }
+
+        // DYNAMIC PENALTY: Scale by cooldown
+        score -= enemiesNearTile * MICRO_ENEMY_PENALTY * cooldownTurns;
 
         return score;
     }

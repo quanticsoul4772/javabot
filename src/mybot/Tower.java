@@ -1,6 +1,8 @@
 package mybot;
 
 import battlecode.common.*;
+import mybot.strategy.FocusFireCoordinator;
+import mybot.strategy.SpawnManager;
 
 /**
  * Tower behavior using Priority Chain Pattern.
@@ -14,6 +16,15 @@ public class Tower {
     private static int soldiersSpawned = 0;
     private static int moppersSpawned = 0;
     private static int splashersSpawned = 0;
+    private static int totalSpawned = 0;  // Total units spawned by this tower
+
+    // Spawn pacing (like SPAARK) - track last spawn round
+    private static int lastSpawnRound = 0;
+
+    // AGGRESSIVE: Spawn as many units as possible!
+    // More units = more combat power = better chance of winning
+    private static final int EARLY_GAME_SPAWN_LIMIT = 20;  // Higher limit for more units
+    private static final int EARLY_GAME_ROUND = 75;  // Longer aggressive spawning phase
 
     // Rush detection state
     private static boolean rushDetected = false;
@@ -27,11 +38,37 @@ public class Tower {
     private static final int PHASE_BROADCAST_INTERVAL = 50;
     private static final int LATE_GAME_ROUND = 800;  // Earlier aggression
 
+    // Extended spawn locations (8 adjacent + 4 distance 2, like SPAARK)
+    private static MapLocation[] spawnLocs = null;
+
     public static void run(RobotController rc) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
         int round = rc.getRoundNum();
         UnitType myType = rc.getType();
         boolean isPaintTower = Utils.isPaintTower(myType);
+
+        // Initialize spawn locations once (like SPAARK: 8 adjacent + 4 distance 2)
+        if (spawnLocs == null) {
+            MapLocation center = new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2);
+            spawnLocs = new MapLocation[] {
+                myLoc.add(Direction.NORTH),
+                myLoc.add(Direction.NORTHEAST),
+                myLoc.add(Direction.EAST),
+                myLoc.add(Direction.SOUTHEAST),
+                myLoc.add(Direction.SOUTH),
+                myLoc.add(Direction.SOUTHWEST),
+                myLoc.add(Direction.WEST),
+                myLoc.add(Direction.NORTHWEST),
+                // Distance 2 locations
+                myLoc.add(Direction.NORTH).add(Direction.NORTH),
+                myLoc.add(Direction.EAST).add(Direction.EAST),
+                myLoc.add(Direction.SOUTH).add(Direction.SOUTH),
+                myLoc.add(Direction.WEST).add(Direction.WEST),
+            };
+            // Sort by distance to center (spawn closer to center first)
+            java.util.Arrays.sort(spawnLocs,
+                (a, b) -> a.distanceSquaredTo(center) - b.distanceSquaredTo(center));
+        }
 
         // ===== PRIORITY 0: ECONOMY UPDATE =====
         Utils.updateIncomeEstimate(rc);
@@ -72,7 +109,7 @@ public class Tower {
         }
 
         // ===== PRIORITY 3.5: COORDINATE ATTACK ON THREATS =====
-        // Find allies' paint towers and coordinate attacks on enemies near them
+        // Use FocusFireCoordinator for intelligent target prioritization
         if (enemies.length > 0) {
             // Track enemy composition for strategy detection
             Utils.trackEnemyComposition(enemies);
@@ -86,21 +123,8 @@ public class Tower {
             }
             Metrics.trackEnemySighting(enemies.length - enemyTowerCount, enemyTowerCount);
 
-            // Find enemy closest to our location (paint tower priority)
-            RobotInfo biggestThreat = null;
-            int closestDist = Integer.MAX_VALUE;
-            for (RobotInfo enemy : enemies) {
-                int dist = enemy.getLocation().distanceSquaredTo(myLoc);
-                if (dist < closestDist && dist <= 64) {  // Within 8 tiles
-                    closestDist = dist;
-                    biggestThreat = enemy;
-                }
-            }
-
-            if (biggestThreat != null) {
-                Comms.broadcastToAllies(rc, Comms.MessageType.ATTACK_TARGET,
-                    biggestThreat.getLocation(), closestDist);
-            }
+            // Use FocusFireCoordinator for prioritized target broadcast
+            FocusFireCoordinator.coordinateAttack(rc);
         }
 
         // ===== PRIORITY 4: BROADCAST THREATS =====
@@ -128,11 +152,13 @@ public class Tower {
             }
         }
 
-        // ===== PRIORITY 5: ATTACK ENEMIES =====
-        attackEnemies(rc, enemies);
-
-        // ===== PRIORITY 6: SPAWN UNITS =====
+        // ===== PRIORITY 5: SPAWN UNITS (BEFORE attacking!) =====
+        // CRITICAL: Spawning and attacking both use the action cooldown.
+        // We must spawn FIRST because creating new units > dealing damage.
         spawnUnit(rc, round, underThreat, panicMode, inRushMode, enemies);
+
+        // ===== PRIORITY 6: ATTACK ENEMIES =====
+        attackEnemies(rc, enemies);
 
         // ===== PRIORITY 7: UPGRADE (late game only) =====
         if (round > 500 && !panicMode && !inRushMode) {
@@ -184,71 +210,189 @@ public class Tower {
 
     /**
      * Priority 6: Spawn units based on game state.
+     * Uses SpawnManager for adaptive, strategy-aware unit selection.
+     * CRITICAL: When under attack, spawn MORE defenders, don't stop spawning!
      */
     private static void spawnUnit(RobotController rc, int round, boolean underThreat,
                                    boolean panicMode, boolean inRushMode,
                                    RobotInfo[] enemies) throws GameActionException {
-        // Count enemy splashers for adaptive spawning
-        int enemySplashers = 0;
-        for (RobotInfo enemy : enemies) {
-            if (enemy.getType() == UnitType.SPLASHER) {
-                enemySplashers++;
+        // REMOVED: shouldDefendInsteadOfSpawn check
+        // When under attack, we NEED to spawn defenders, not stop spawning!
+
+        // AGGRESSIVE SPAWNING: Always spawn what we can afford!
+        // Paint costs: SOLDIER=200, MOPPER=100, SPLASHER=200
+        UnitType toSpawn;
+        int myPaint = rc.getPaint();
+        int myMoney = rc.getMoney();
+
+        if (round < EARLY_GAME_ROUND && totalSpawned < EARLY_GAME_SPAWN_LIMIT) {
+            // Early game: spawn units ASAP for numbers advantage
+            if (myPaint >= UnitType.SOLDIER.paintCost && myMoney >= UnitType.SOLDIER.moneyCost) {
+                toSpawn = UnitType.SOLDIER;  // Can afford soldier
+            } else if (round < 10 && myPaint >= UnitType.MOPPER.paintCost && myMoney >= UnitType.MOPPER.moneyCost) {
+                // VERY EARLY GAME (round 1-9): Spawn moppers to get units on the map ASAP!
+                // SPAARK has units at round 3 - we need to match that.
+                toSpawn = UnitType.MOPPER;
+                rc.setIndicatorString("P6: Early mopper (round=" + round + ")");
+            } else if (enemies.length >= 2 && myPaint >= UnitType.MOPPER.paintCost && myMoney >= UnitType.MOPPER.moneyCost) {
+                // Under attack and can't afford soldier - spawn mopper to help
+                toSpawn = UnitType.MOPPER;
+                rc.setIndicatorString("P6: Emergency mopper (enemies=" + enemies.length + ")");
+            } else if (myPaint >= 100) {
+                // Have some paint, wait for soldier
+                rc.setIndicatorString("P6: Saving for soldier (" + myPaint + "/200)");
+                return;
+            } else {
+                rc.setIndicatorString("P6: Waiting for resources");
+                return;  // Can't afford anything
             }
+        } else if (round < EARLY_GAME_ROUND) {
+            // Already hit spawn limit - save paint for splashers
+            if (myPaint >= UnitType.SPLASHER.paintCost && myMoney >= UnitType.SPLASHER.moneyCost) {
+                toSpawn = UnitType.SPLASHER;
+            } else if (enemies.length >= 1 && myPaint >= UnitType.MOPPER.paintCost) {
+                // Emergency: under attack, spawn mopper to help
+                toSpawn = UnitType.MOPPER;
+                rc.setIndicatorString("P6: EMERGENCY mopper spawn!");
+            } else {
+                rc.setIndicatorString("P6: Waiting for splasher paint (" + myPaint + "/200)");
+                return;
+            }
+        } else if (panicMode && rc.getHealth() < 200) {
+            // True panic: tower about to die, spawn soldiers only
+            toSpawn = UnitType.SOLDIER;
+        } else if (splashersSpawned < 2) {
+            // After round 50, prioritize getting 2 splashers out
+            if (myPaint >= UnitType.SPLASHER.paintCost) {
+                toSpawn = UnitType.SPLASHER;
+            } else {
+                rc.setIndicatorString("P6: Need splashers, waiting (" + myPaint + "/200)");
+                return;  // Wait for splasher paint
+            }
+        } else {
+            // Normal: Use SpawnManager for all spawning decisions
+            toSpawn = SpawnManager.getSpawnType(rc);
         }
 
-        UnitType toSpawn = chooseUnitToSpawn(round, underThreat, panicMode, inRushMode, enemySplashers);
         if (toSpawn == null) return;
 
         // Try to spawn the chosen unit
         UnitType actualSpawn = trySpawnUnit(rc, toSpawn, enemies);
 
         if (actualSpawn != null) {
-            if (panicMode) {
-                rc.setIndicatorString("P6: PANIC SPAWN " + actualSpawn);
+            if (enemies.length >= 2 || panicMode) {
+                rc.setIndicatorString("P6: DEFENSE SPAWN " + actualSpawn);
             } else if (inRushMode) {
                 rc.setIndicatorString("P6: RUSH DEFENSE " + actualSpawn);
             } else {
                 rc.setIndicatorString("P6: Spawned " + actualSpawn);
             }
+        } else if (Metrics.ENABLED && round <= 100 && round % 10 == 0) {
+            // Debug: why couldn't we spawn?
+            System.out.println("[TOWER #" + rc.getID() + " r" + round + "] SPAWN FAILED: " +
+                "wanted=" + toSpawn + " money=" + rc.getMoney() + " paint=" + rc.getPaint() +
+                " enemies=" + enemies.length);
         }
     }
 
     /**
      * Try to spawn the specified unit type at any available location.
-     * Falls back to other unit types if the preferred one can't be built.
+     * PAINT-AWARE: Check if we have enough paint before trying to spawn.
+     *
+     * Paint costs: SOLDIER=200, MOPPER=100, SPLASHER=200
+     * Money costs: SOLDIER=250, MOPPER=300, SPLASHER=250
+     *
      * Returns the unit type spawned, or null if couldn't spawn anything.
      */
     private static UnitType trySpawnUnit(RobotController rc, UnitType unitType,
                                           RobotInfo[] enemies) throws GameActionException {
-        // Define fallback order: preferred unit first, then alternatives
-        UnitType[] fallbackOrder;
-        switch (unitType) {
-            case SPLASHER:
-                // Splasher → Soldier → Mopper (keep combat capability)
-                fallbackOrder = new UnitType[]{UnitType.SPLASHER, UnitType.SOLDIER, UnitType.MOPPER};
-                break;
-            case SOLDIER:
-                // Soldier → Splasher → Mopper (keep combat capability)
-                fallbackOrder = new UnitType[]{UnitType.SOLDIER, UnitType.SPLASHER, UnitType.MOPPER};
-                break;
-            case MOPPER:
-            default:
-                // Mopper → Soldier → Splasher
-                fallbackOrder = new UnitType[]{UnitType.MOPPER, UnitType.SOLDIER, UnitType.SPLASHER};
-                break;
-        }
+        int round = rc.getRoundNum();
+        int myPaint = rc.getPaint();
+        int myMoney = rc.getMoney();
+        boolean isPaintTower = Utils.isPaintTower(rc.getType());
 
-        // Try each unit type in fallback order
-        for (UnitType tryType : fallbackOrder) {
-            MapLocation spawnLoc = findSpawnLocation(rc, tryType, enemies);
-            if (spawnLoc != null && rc.canBuildRobot(tryType, spawnLoc)) {
-                rc.buildRobot(tryType, spawnLoc);
-                trackSpawn(tryType);
-                return tryType;
+        // NON-PAINT TOWERS: Limited spawns after round 10
+        // Money towers and Defense towers don't regenerate paint!
+        // BUT: If under attack and have paint, spawn a defender!
+        if (!isPaintTower && round >= 10) {
+            // Allow emergency spawn if under attack and have paint for a mopper
+            if (enemies.length >= 2 && myPaint >= UnitType.MOPPER.paintCost) {
+                // Continue to try spawning a defender
+            } else {
+                // Not under attack or no paint - skip
+                return null;
             }
         }
 
-        return null;  // Couldn't spawn anything
+        // SPAWN PACING: Removed - the SPAARK-style limit in spawnUnit() handles this
+        // by limiting early game spawns and requiring 200 paint for splashers
+
+        // AGGRESSIVE: Don't block any spawn type - spawn whatever we can afford!
+        // Early game units are valuable even if moppers
+
+        // PAINT CHECK: Don't even try if we don't have enough paint
+        if (myPaint < unitType.paintCost || myMoney < unitType.moneyCost) {
+            // Can't afford requested unit
+            // EMERGENCY: If under attack, spawn mopper as defender (costs 100 paint)
+            if (enemies.length >= 1 && myPaint >= UnitType.MOPPER.paintCost &&
+                myMoney >= UnitType.MOPPER.moneyCost) {
+                MapLocation spawnLoc = findSpawnLocation(rc, UnitType.MOPPER, enemies);
+                if (spawnLoc != null && rc.canBuildRobot(UnitType.MOPPER, spawnLoc)) {
+                    rc.buildRobot(UnitType.MOPPER, spawnLoc);
+                    trackSpawn(UnitType.MOPPER, round);
+                    return UnitType.MOPPER;
+                }
+            }
+            return null;
+        }
+
+        // EARLY GAME (round < 15): Spawn what SpawnManager says, no pacing limit
+        // SpawnManager handles ratios: r1-14 = soldiers, r15+ = mix with splashers
+        if (round < 15) {
+            MapLocation spawnLoc = findSpawnLocation(rc, unitType, enemies);
+            if (spawnLoc != null && rc.canBuildRobot(unitType, spawnLoc)) {
+                rc.buildRobot(unitType, spawnLoc);
+                trackSpawn(unitType, round);
+                return unitType;
+            }
+            // If can't spawn requested type, try soldier as fallback
+            if (unitType != UnitType.SOLDIER && myPaint >= UnitType.SOLDIER.paintCost) {
+                spawnLoc = findSpawnLocation(rc, UnitType.SOLDIER, enemies);
+                if (spawnLoc != null && rc.canBuildRobot(UnitType.SOLDIER, spawnLoc)) {
+                    rc.buildRobot(UnitType.SOLDIER, spawnLoc);
+                    trackSpawn(UnitType.SOLDIER, round);
+                    return UnitType.SOLDIER;
+                }
+            }
+            return null;
+        }
+
+        // MID/LATE GAME: Try requested type
+        MapLocation spawnLoc = findSpawnLocation(rc, unitType, enemies);
+        if (spawnLoc != null && rc.canBuildRobot(unitType, spawnLoc)) {
+            rc.buildRobot(unitType, spawnLoc);
+            trackSpawn(unitType, round);
+            return unitType;
+        }
+
+        // If we wanted splasher but can't afford it, wait for paint
+        if (unitType == UnitType.SPLASHER) {
+            return null;
+        }
+
+        // For soldiers, if location blocked try splasher instead (same paint cost)
+        // NO mopper fallback - save paint for high-value units
+        if (unitType == UnitType.SOLDIER && myPaint >= UnitType.SPLASHER.paintCost &&
+            myMoney >= UnitType.SPLASHER.moneyCost) {
+            spawnLoc = findSpawnLocation(rc, UnitType.SPLASHER, enemies);
+            if (spawnLoc != null && rc.canBuildRobot(UnitType.SPLASHER, spawnLoc)) {
+                rc.buildRobot(UnitType.SPLASHER, spawnLoc);
+                trackSpawn(UnitType.SPLASHER, round);
+                return UnitType.SPLASHER;
+            }
+        }
+
+        return null;  // Couldn't spawn - wait for paint
     }
 
     // ==================== SPAWN LOGIC ====================
@@ -333,13 +477,14 @@ public class Tower {
     }
 
     /**
-     * Find spawn location, preferring away from enemies.
+     * Find spawn location using extended spawn locations (12 tiles, sorted by center distance).
+     * Prefers spawning away from enemies when under attack.
      */
     private static MapLocation findSpawnLocation(RobotController rc, UnitType type,
                                                   RobotInfo[] enemies) throws GameActionException {
         MapLocation myLoc = rc.getLocation();
 
-        // If enemies present, spawn on opposite side
+        // If enemies present, try to spawn on opposite side first (adjacent only)
         if (enemies.length > 0) {
             RobotInfo closest = Utils.closestRobot(myLoc, enemies);
             if (closest != null) {
@@ -357,11 +502,13 @@ public class Tower {
             }
         }
 
-        // Default: first available adjacent tile
-        for (Direction dir : Utils.DIRECTIONS) {
-            MapLocation loc = myLoc.add(dir);
-            if (rc.canBuildRobot(type, loc)) {
-                return loc;
+        // Use extended spawn locations (sorted by distance to center)
+        // This includes 8 adjacent + 4 distance-2 tiles
+        if (spawnLocs != null) {
+            for (MapLocation loc : spawnLocs) {
+                if (rc.canBuildRobot(type, loc)) {
+                    return loc;
+                }
             }
         }
 
@@ -369,9 +516,11 @@ public class Tower {
     }
 
     /**
-     * Track spawned units for composition balance.
+     * Track spawned units for composition balance and pacing.
      */
-    private static void trackSpawn(UnitType type) {
+    private static void trackSpawn(UnitType type, int round) {
+        lastSpawnRound = round;  // Track for spawn pacing
+        totalSpawned++;          // Track total for SPAARK-style limits
         switch (type) {
             case SOLDIER:
                 soldiersSpawned++;
@@ -449,15 +598,17 @@ public class Tower {
      */
     private static void reportMetrics(RobotController rc, int round) {
         // Tower-specific metrics only (spawns are tracked in Tower)
-        if (round % 500 == 0) {
+        // ===== METRICS: Frequent early game reports (every 25 rounds until r200) =====
+        if (round <= 200 && round % 25 == 0) {
+            System.out.println("[TOWER #" + rc.getID() + " r" + round + "] " +
+                "spawns: " + soldiersSpawned + "S/" + moppersSpawned + "M/" + splashersSpawned + "X " +
+                "hp=" + rc.getHealth() + "/" + rc.getType().health +
+                " paint=" + rc.getPaint());
+        } else if (round % 100 == 0) {
             System.out.println("[TOWER #" + rc.getID() + " r" + round + "] " +
                 "spawned: soldiers=" + soldiersSpawned +
                 " moppers=" + moppersSpawned +
                 " splashers=" + splashersSpawned);
-        }
-
-        // Game summary metrics every 100 rounds
-        if (round % 100 == 0) {
             Metrics.reportGameSummary(round);
         }
     }
