@@ -1097,7 +1097,34 @@ public static void run() throws Exception {
 }
 ```
 
-### 14.2 Bug2 Pathfinding Algorithm
+### 14.2 Motion System (NOT Just Bug2 - 1868 Lines!)
+
+**CRITICAL UPDATE (from 107 iterations, 2026-01-05)**:
+
+The original spec showed basic Bug2 (~50 lines). SPAARK's ACTUAL Motion.java:
+- **1868 lines of code**
+- **108 public methods**
+- **11x more complex than shown in spec**
+
+**What We Thought**: Simple Bug2 pathfinding
+**What SPAARK Has**: Comprehensive movement system
+
+**Motion.java Contents**:
+1. Bug2 with TOWARDS/AWAY/AROUND modes (200+ lines)
+2. Exploration strategies: exploreRandomly, exploreCorners, spreadRandomly (400+ lines)
+3. Sophisticated retreat with queue management (300+ lines)
+4. Paint transfer integrated with movement (100+ lines)
+5. Multiple Micro variants: defaultMicro, attackMicro, moveWithPaintMicro (500+ lines)
+6. Movement helpers: bugnavTowards/Away/Around (300+ lines)
+
+**Performance Impact**:
+- omnom with simplified Nav (251 lines): **198 rounds**
+- SPAARK with full Motion (1868 lines): **327 rounds**
+- **Gap: 129 rounds**
+
+**This is the missing piece.**
+
+### 14.2.1 Basic Bug2 (What Spec Originally Showed)
 
 **Source**: Existing spaark3 Nav.java (based on SPAARK pattern)
 
