@@ -196,28 +196,21 @@ public class Soldier {
             }
         }
 
-        // BUILD_TOWER: Rebuild lost towers (safe conditions only)
-        if (mode == Mode.EXPLORE && G.round >= 20 && G.rc.getNumberTowers() < 5) {
-            RobotInfo[] allies = G.getAllies();
-            RobotInfo[] enemies = G.getEnemies();
-
-            // SAFE: Only build if 3+ allies AND no enemies AND towers < 5
-            if (allies.length >= 3 && enemies.length == 0) {
-                MapLocation ruin = POI.findNearestNeutralRuin();
-                if (ruin != null && G.me.distanceSquaredTo(ruin) <= 25 && !G.recentlyVisited(ruin, 100)) {
-                    mode = Mode.BUILD_TOWER;
-                    buildTarget = ruin;
-                    buildTimeout = 0;
-                    return;
-                }
+        // BUILD 3RD TOWER: Aggressive early building for more spawn capacity
+        if (mode == Mode.EXPLORE && G.round >= 25 && G.round <= 50 && G.rc.getNumberTowers() <= 2) {
+            MapLocation ruin = POI.findNearestNeutralRuin();
+            if (ruin != null && G.me.distanceSquaredTo(ruin) <= 25 && !G.recentlyVisited(ruin, 300)) {
+                mode = Mode.BUILD_TOWER;
+                buildTarget = ruin;
+                buildTimeout = 0;
+                return;
             }
         }
 
-        // Exit BUILD_TOWER if enemies appear or timeout
+        // Exit BUILD_TOWER only on timeout (commit to building)
         if (mode == Mode.BUILD_TOWER) {
-            RobotInfo[] enemies = G.getEnemies();
             buildTimeout++;
-            if (enemies.length > 0 || buildTimeout > 40 || buildTarget == null) {
+            if (buildTimeout > 60 || buildTarget == null) {
                 mode = Mode.EXPLORE;
                 buildTarget = null;
                 buildTimeout = 0;

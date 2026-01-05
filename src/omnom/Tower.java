@@ -33,24 +33,6 @@ public class Tower {
             spawnLocsInitialized = true;
         }
 
-        // MONEY TOWER NUKING: Trade money for paint (from spec Part 16.6)
-        if (G.type == UnitType.LEVEL_ONE_MONEY_TOWER) {
-            int threshold = G.id < 10000 ? 20000 : G.id * 3 - 10000;
-            if (G.chips > threshold
-                && prevChips < G.chips
-                && G.rc.getNumberTowers() >= prevTowers
-                && G.round % 5 == 0) {
-
-                System.out.println("TOWER_NUKE:" + G.round + ":TOWER:" + G.id +
-                    ":chips=" + G.chips + ":threshold=" + threshold);
-
-                // Attack to spend paint, then self-destruct for 500 paint on next spawn
-                tryAttack();
-                G.rc.disintegrate();
-                return;
-            }
-        }
-
         prevChips = G.chips;
         prevTowers = G.rc.getNumberTowers();
 
@@ -204,7 +186,7 @@ public class Tower {
             toSpawn = UnitType.SOLDIER;
         }
 
-        // SPAARK spawn conditions (original)
+        // SPAARK spawn conditions (baseline)
         boolean shouldSpawn = G.round < 10
             || G.rc.getNumberTowers() >= 25
             || (G.rc.getMoney() - toSpawn.moneyCost >= 900

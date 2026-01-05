@@ -1,0 +1,82 @@
+Running match: SPAARK vs SPAARK on DefaultSmall
+Output will be saved to: match_report_1767636366.txt
+
+Match complete. Generating report...
+
+=========================================
+=== MATCH REPORT ===
+=========================================
+
+Result: LOSS at round 327
+Opponent: SPAARK on DefaultSmall
+
+=== BEHAVIOR ANALYSIS ===
+=== INDICATOR ANALYSIS ===
+
+Soldier modes seen: []
+  Expected: {EXPLORE, BUILD_TOWER, ATTACK, RETREAT, BUILD_RESOURCE, EXPAND_RESOURCE, MESSING_UP}
+  Status: ? FAIL (too few modes)
+
+Retreat validation: ? PASS
+  No retreats observed
+
+Mode Distribution:
+  EXPLORE: 0 turns (0%)
+  ATTACK_TOWER: 0 turns (0%)
+  RETREAT: 0 turns (0%)
+  BUILD_TOWER: 0 turns (0%)
+  ATTACK: 0 turns (0%)
+
+? OVERALL: Behavior validation FAILED
+Parser not available or failed
+
+./test/scripts/generate_report.sh: line 58: [: 0
+0: integer expression expected
+./test/scripts/generate_report.sh: line 66: [: 0
+0: integer expression expected
+./test/scripts/generate_report.sh: line 81: [: 0
+0: integer expression expected
+=== ENEMY ANALYSIS ===
+Enemy spawns: 0
+0
+Our spawns: 0
+0
+./test/scripts/generate_report.sh: line 94: [: 0
+0: integer expression expected
+
+Enemy unit trend (sampled every 5th observation):
+
+Our unit trend (from STATE snapshots):
+
+Force Balance Analysis:
+  Our unique soldiers: 0
+  Max enemies observed at once: 
+
+Economy Comparison:
+  Our Stats:
+    Max chips: 
+    Max income: /turn
+    Towers:  start →  end
+  Enemy Stats (observed):
+    Max towers seen: 
+    Early game avg towers: 0
+./test/scripts/generate_report.sh: line 165: [: 0
+0: integer expression expected
+    ❌ We NEVER upgraded (max chips  < 2500 needed)
+
+=== DETECTED ISSUES ===
+  ❌ Bytecode overflow detected (13 instances)
+
+=== SUMMARY ===
+Full match log saved to: match_report_1767636366.txt
+
+To view specific sections:
+  Indicators: grep '\[A:' match_report_1767636366.txt | less
+  Decisions: grep 'DECISION:' match_report_1767636366.txt
+  Profile: grep 'PROFILE:' match_report_1767636366.txt
+  Stats: grep 'MATCH_SUMMARY' match_report_1767636366.txt -A 10
+  Maps: grep 'SENSED_MAP' match_report_1767636366.txt -A 10
+
+=========================================
+=== END REPORT ===
+=========================================

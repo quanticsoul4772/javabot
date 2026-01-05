@@ -1,0 +1,38 @@
+> Task :compileJava UP-TO-DATE
+> Task :compileScala NO-SOURCE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+> Task :compileTestScala NO-SOURCE
+> Task :processTestResources NO-SOURCE
+> Task :testClasses UP-TO-DATE
+> Task :test UP-TO-DATE
+> Task :check UP-TO-DATE
+> Task :unpackClient UP-TO-DATE
+> Task :checkNewVersion
+> Task :build UP-TO-DATE
+
+> Task :run
+[server] -------------------- Match Starting --------------------
+[server] SPAARK vs. SPAARK on DefaultSmall
+[A: #11897@4] Bytecode overflow! (Round 3, SOLDIER, [6, 4])
+[B: #13774@4] Bytecode overflow! (Round 3, SOLDIER, [13, 15])
+[A: #12049@4] Bytecode overflow! (Round 3, SOLDIER, [10, 4])
+[B: #13640@4] Bytecode overflow! (Round 3, SOLDIER, [11, 15])
+[A: #13054@12] Bytecode overflow! (Round 11, SOLDIER, [5, 5])
+[B: #13778@12] Bytecode overflow! (Round 11, SOLDIER, [15, 14])
+[A: #13054@65] Bytecode overflow! (Round 64, SOLDIER, [15, 11])
+[A: #12208@92] Bytecode overflow! (Round 91, SOLDIER, [4, 5])
+[B: #13505@99] Bytecode overflow! (Round 98, SOLDIER, [15, 14])
+[A: #10637@110] Bytecode overflow! (Round 109, MOPPER, [6, 5])
+[A: #11523@162] Bytecode overflow! (Round 161, MOPPER, [6, 5])
+[A: #13129@258] Bytecode overflow! (Round 257, MOPPER, [6, 5])
+[A: #12646@272] Bytecode overflow! (Round 271, SOLDIER, [5, 5])
+[server]                     SPAARK (A) wins (round 327)
+[server] Reason: The winning team destroyed all of the enemy team's units.
+[server] -------------------- Match Finished --------------------
+
+BUILD SUCCESSFUL in 5s
+7 actionable tasks: 2 executed, 5 up-to-date
