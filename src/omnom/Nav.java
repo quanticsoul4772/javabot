@@ -403,4 +403,72 @@ public class Nav {
             }
         }
     }
+
+    // Retreat state
+    private static int retreatTower = -1;
+    private static MapLocation retreatLoc = null;
+    private static MapLocation retreatWaitingLoc = null;
+    private static final int MAX_RETREAT_ROBOTS = 4;
+    private static MapLocation[] retreatWaitingLocs = new MapLocation[] {
+        new MapLocation(2, 2), new MapLocation(2, -2),
+        new MapLocation(-2, 2), new MapLocation(-2, -2),
+        new MapLocation(2, 0), new MapLocation(0, 2),
+        new MapLocation(-2, 0), new MapLocation(0, -2)
+    };
+
+    /**
+     * Update retreat waiting position (SPAARK Motion.java).
+     */
+    public static void updateRetreatWaitingLoc() throws GameActionException {
+        int ourWeight = -G.paint;
+        int robotsWithHigherWeight = 0;
+
+        int dist = G.me.distanceSquaredTo(retreatLoc);
+        if (dist == 4 || dist == 8) {
+            for (int i = 8; --i >= 0;) {
+                MapLocation waitingLoc = retreatWaitingLocs[i].translate(retreatLoc.x, retreatLoc.y);
+                if (waitingLoc.equals(G.me)) continue;
+
+                if (G.rc.canSenseLocation(waitingLoc) && G.rc.canSenseRobotAtLocation(waitingLoc)) {
+                    RobotInfo r = G.rc.senseRobotAtLocation(waitingLoc);
+                    int weight = -r.paintAmount;
+                    if (weight > ourWeight) {
+                        robotsWithHigherWeight++;
+                        if (robotsWithHigherWeight >= MAX_RETREAT_ROBOTS) {
+                            retreatTower = -1;  // Queue full
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find best waiting position
+        int bestIdx = 0;
+        int bestDist = Integer.MAX_VALUE;
+
+        for (int i = 8; --i >= 0;) {
+            MapLocation waitingLoc = retreatWaitingLocs[i].translate(retreatLoc.x, retreatLoc.y);
+            int d = G.me.distanceSquaredTo(waitingLoc);
+            if (d < bestDist) {
+                bestDist = d;
+                bestIdx = i;
+            }
+        }
+
+        retreatWaitingLoc = retreatWaitingLocs[bestIdx].translate(retreatLoc.x, retreatLoc.y);
+    }
+
+    /**
+     * Set retreat tower (SPAARK Motion.java).
+     */
+    public static void setRetreatLoc() throws GameActionException {
+        // Find nearest ally paint tower
+        retreatLoc = POI.findNearestAllyPaintTower();
+        if (retreatLoc == null) {
+            retreatLoc = POI.findNearestAllyTower();
+        }
+        retreatTower = retreatLoc != null ? 0 : -1;
+        retreatWaitingLoc = null;
+    }
 }
