@@ -1,0 +1,113 @@
+> Task :compileJava UP-TO-DATE
+> Task :compileScala NO-SOURCE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+> Task :compileTestScala NO-SOURCE
+> Task :processTestResources NO-SOURCE
+> Task :testClasses UP-TO-DATE
+> Task :test UP-TO-DATE
+> Task :check UP-TO-DATE
+> Task :unpackClient UP-TO-DATE
+> Task :checkNewVersion
+> Task :build UP-TO-DATE
+
+> Task :run
+[server] -------------------- Match Starting --------------------
+[server] omnom vs. SPAARK on DefaultSmall
+[A: #1@1] INIT:1:LEVEL_TWO_PAINT_TOWER:1:pos=[5, 2]
+[A: #1@1] SPAWN:1:TOWER:1:unit=SOLDIER:location=[5, 3]:total=1:soldiers=1
+[A: #3@1] INIT:1:LEVEL_TWO_MONEY_TOWER:3:pos=[10, 2]
+[A: #3@1] SPAWN:1:TOWER:3:unit=SOLDIER:location=[10, 3]:total=1:soldiers=1
+[A: #1@2] SPAWN:2:TOWER:1:unit=SOLDIER:location=[6, 3]:total=2:soldiers=2
+[A: #3@2] SPAWN:2:TOWER:3:unit=SOLDIER:location=[11, 3]:total=2:soldiers=2
+[A: #11577@2] INIT:2:SOLDIER:11577:pos=[5, 3]
+[A: #12772@2] INIT:2:SOLDIER:12772:pos=[10, 3]
+[A: #11897@3] INIT:3:SOLDIER:11897:pos=[6, 3]
+[A: #12049@3] INIT:3:SOLDIER:12049:pos=[11, 3]
+[B: #13774@4] Bytecode overflow! (Round 3, SOLDIER, [13, 15])
+[B: #13640@4] Bytecode overflow! (Round 3, SOLDIER, [11, 15])
+[A: #1@10] ECONOMY:10:TOWER:1:chips=1800:income=1800:towers=2:units=0:paint=200
+[A: #1@10] SPAWN:10:TOWER:1:unit=SOLDIER:location=[5, 3]:total=3:soldiers=3
+[A: #3@10] ECONOMY:10:TOWER:3:chips=1550:income=1550:towers=2:units=0:paint=100
+[A: #11577@10] STATE:10:SOLDIER:11577:pos=[10, 10]:paint=148:chips=1550:mode=EXPLORE:allies=3:enemies=3:towers=2
+[A: #11577@10] ENEMY_COUNT:10:11577:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #12772@10] STATE:10:SOLDIER:12772:pos=[10, 9]:paint=136:chips=1550:mode=EXPLORE:allies=3:enemies=3:towers=1
+[A: #12772@10] ENEMY_COUNT:10:12772:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #11897@10] STATE:10:SOLDIER:11897:pos=[9, 8]:paint=144:chips=1550:mode=EXPLORE:allies=3:enemies=3:towers=2
+[A: #11897@10] ENEMY_COUNT:10:11897:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #12049@10] STATE:10:SOLDIER:12049:pos=[11, 8]:paint=143:chips=1550:mode=EXPLORE:allies=3:enemies=3:towers=1
+[A: #12049@10] ENEMY_COUNT:10:12049:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #13054@11] INIT:11:SOLDIER:13054:pos=[5, 3]
+[B: #13778@12] Bytecode overflow! (Round 11, SOLDIER, [15, 14])
+[A: #1@20] ECONOMY:20:TOWER:1:chips=1850:income=50:towers=2:units=0:paint=100
+[A: #3@20] ECONOMY:20:TOWER:3:chips=1850:income=300:towers=2:units=0:paint=100
+[A: #11577@20] STATE:20:SOLDIER:11577:pos=[10, 10]:paint=88:chips=1850:mode=EXPLORE:allies=4:enemies=2:towers=2
+[A: #11577@20] ENEMY_COUNT:20:11577:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #12772@20] STATE:20:SOLDIER:12772:pos=[10, 9]:paint=56:chips=1850:mode=EXPLORE:allies=4:enemies=2:towers=1
+[A: #12772@20] ENEMY_COUNT:20:12772:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #11897@20] STATE:20:SOLDIER:11897:pos=[9, 8]:paint=44:chips=1850:mode=EXPLORE:allies=4:enemies=2:towers=2
+[A: #11897@20] ENEMY_COUNT:20:11897:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #12049@20] STATE:20:SOLDIER:12049:pos=[11, 8]:paint=53:chips=1850:mode=EXPLORE:allies=4:enemies=2:towers=1
+[A: #12049@20] ENEMY_COUNT:20:12049:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #13054@20] STATE:20:SOLDIER:13054:pos=[9, 7]:paint=149:chips=1850:mode=EXPLORE:allies=4:enemies=2:towers=2
+[A: #13054@20] ENEMY_COUNT:20:13054:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #1@30] ECONOMY:30:TOWER:1:chips=2150:income=300:towers=2:units=0:paint=200
+[A: #1@30] SPAWN:30:TOWER:1:unit=SOLDIER:location=[5, 3]:total=4:soldiers=4
+[A: #3@30] ECONOMY:30:TOWER:3:chips=1900:income=50:towers=2:units=2:paint=100
+[A: #11577@30] STATE:30:SOLDIER:11577:pos=[10, 10]:paint=45:chips=1900:mode=EXPLORE:allies=2:enemies=3:towers=2
+[A: #11577@30] ENEMY_COUNT:30:11577:total=3:soldiers=2:splashers=0:moppers=1:towers=0
+[A: #12772@30] STATE:30:SOLDIER:12772:pos=[10, 4]:paint=25:chips=1900:mode=EXPLORE:allies=4:enemies=2:towers=1
+[A: #12772@30] ENEMY_COUNT:30:12772:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #11897@30] STATE:30:SOLDIER:11897:pos=[9, 8]:paint=0:chips=1900:mode=EXPLORE:allies=3:enemies=2:towers=2
+[A: #11897@30] ENEMY_COUNT:30:11897:total=2:soldiers=1:splashers=0:moppers=1:towers=0
+[A: #12049@30] STATE:30:SOLDIER:12049:pos=[10, 3]:paint=43:chips=1900:mode=EXPLORE:allies=3:enemies=1:towers=1
+[A: #12049@30] ENEMY_COUNT:30:12049:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #13054@30] STATE:30:SOLDIER:13054:pos=[9, 7]:paint=84:chips=1900:mode=EXPLORE:allies=4:enemies=2:towers=2
+[A: #13054@30] ENEMY_COUNT:30:13054:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #11718@31] INIT:31:SOLDIER:11718:pos=[5, 3]
+[A: #1@40] ECONOMY:40:TOWER:1:chips=2200:income=50:towers=2:units=1:paint=100
+[A: #3@40] ECONOMY:40:TOWER:3:chips=2200:income=300:towers=2:units=4:paint=100
+[A: #11577@40] STATE:40:SOLDIER:11577:pos=[10, 5]:paint=21:chips=2200:mode=EXPLORE:allies=6:enemies=2:towers=2
+[A: #11577@40] ENEMY_COUNT:40:11577:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #12772@40] STATE:40:SOLDIER:12772:pos=[10, 4]:paint=9:chips=2200:mode=EXPLORE:allies=6:enemies=1:towers=1
+[A: #12772@40] ENEMY_COUNT:40:12772:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #11897@40] STATE:40:SOLDIER:11897:pos=[9, 8]:paint=0:chips=2200:mode=EXPLORE:allies=4:enemies=3:towers=2
+[A: #11897@40] ENEMY_COUNT:40:11897:total=3:soldiers=2:splashers=0:moppers=1:towers=0
+[A: #12049@40] STATE:40:SOLDIER:12049:pos=[10, 3]:paint=23:chips=2200:mode=EXPLORE:allies=5:enemies=1:towers=1
+[A: #12049@40] ENEMY_COUNT:40:12049:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #13054@40] STATE:40:SOLDIER:13054:pos=[9, 4]:paint=24:chips=2200:mode=EXPLORE:allies=6:enemies=3:towers=2
+[A: #13054@40] ENEMY_COUNT:40:13054:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #11718@40] STATE:40:SOLDIER:11718:pos=[9, 7]:paint=147:chips=2200:mode=EXPLORE:allies=4:enemies=3:towers=2
+[A: #11718@40] ENEMY_COUNT:40:11718:total=3:soldiers=2:splashers=0:moppers=1:towers=0
+[A: #1@50] ECONOMY:50:TOWER:1:chips=2500:income=300:towers=2:units=1:paint=200
+[A: #1@50] SPAWN:50:TOWER:1:unit=SOLDIER:location=[5, 3]:total=5:soldiers=5
+[A: #3@50] ECONOMY:50:TOWER:3:chips=2250:income=50:towers=2:units=4:paint=100
+[A: #11577@50] STATE:50:SOLDIER:11577:pos=[10, 5]:paint=1:chips=2250:mode=EXPLORE:allies=4:enemies=5:towers=2
+[A: #11577@50] ENEMY_COUNT:50:11577:total=5:soldiers=4:splashers=0:moppers=1:towers=0
+[A: #12772@50] STATE:50:SOLDIER:12772:pos=[10, 4]:paint=0:chips=2250:mode=EXPLORE:allies=4:enemies=5:towers=1
+[A: #12772@50] ENEMY_COUNT:50:12772:total=5:soldiers=4:splashers=0:moppers=1:towers=0
+[A: #12049@50] STATE:50:SOLDIER:12049:pos=[10, 3]:paint=0:chips=2250:mode=EXPLORE:allies=4:enemies=5:towers=1
+[A: #12049@50] ENEMY_COUNT:50:12049:total=5:soldiers=4:splashers=0:moppers=1:towers=0
+[A: #13054@50] STATE:50:SOLDIER:13054:pos=[9, 4]:paint=0:chips=2250:mode=EXPLORE:allies=6:enemies=5:towers=2
+[A: #13054@50] ENEMY_COUNT:50:13054:total=5:soldiers=4:splashers=0:moppers=1:towers=0
+[A: #11560@51] INIT:51:SOLDIER:11560:pos=[5, 3]
+[A: #1@60] ECONOMY:60:TOWER:1:chips=2550:income=50:towers=2:units=0:paint=100
+[A: #3@60] ECONOMY:60:TOWER:3:chips=2550:income=300:towers=2:units=1:paint=100
+[A: #11577@60] STATE:60:SOLDIER:11577:pos=[10, 5]:paint=0:chips=2550:mode=EXPLORE:allies=2:enemies=4:towers=2
+[A: #11577@60] ENEMY_COUNT:60:11577:total=4:soldiers=3:splashers=0:moppers=1:towers=0
+[A: #11560@60] STATE:60:SOLDIER:11560:pos=[9, 7]:paint=150:chips=2550:mode=EXPLORE:allies=1:enemies=3:towers=2
+[A: #11560@60] ENEMY_COUNT:60:11560:total=3:soldiers=2:splashers=0:moppers=1:towers=0
+[A: #1@70] ECONOMY:70:TOWER:1:chips=2850:income=300:towers=2:units=0:paint=200
+[A: #1@70] SPAWN:70:TOWER:1:unit=SOLDIER:location=[5, 3]:total=6:soldiers=6
+[A: #3@70] ECONOMY:70:TOWER:3:chips=2600:income=50:towers=2:units=0:paint=100
+[A: #12606@71] INIT:71:SOLDIER:12606:pos=[5, 3]
+[A: #3@80] ECONOMY:80:TOWER:3:chips=2900:income=300:towers=1:units=0:paint=100
+[server]                     SPAARK (B) wins (round 83)
+[server] Reason: The winning team destroyed all of the enemy team's units.
+[server] -------------------- Match Finished --------------------
+
+BUILD SUCCESSFUL in 3s
+7 actionable tasks: 2 executed, 5 up-to-date

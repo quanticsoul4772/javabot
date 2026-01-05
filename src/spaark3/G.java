@@ -75,7 +75,7 @@ public class G {
     // Controlled chaos factor (15% randomization)
     public static final double CHAOS_FACTOR = 0.15;
 
-    // Retreat thresholds - conservative to keep units in fight
+    // Retreat thresholds - 50 works better on small maps (aggression > survival)
     public static final int RETREAT_PAINT = 50;
     public static final int RETREAT_CHIPS = 6000;
     public static final int RETREAT_ALLY_THRESHOLD = 9;
@@ -85,6 +85,17 @@ public class G {
     public static int allyPaintTowers = 0;
     public static int allyMoneyTowers = 0;
     public static int allyDefenseTowers = 0;
+
+    // Last visited grid (30x30 for 60x60 map, coordinates / 2)
+    public static int[][] lastVisited = new int[30][30];
+
+    // Paint economics (SPAARK constants)
+    public static final double PAINT_PER_CHIP = 0.25;
+    public static final double PAINT_PER_COOLDOWN = 0.1;
+
+    // Track paint lost this session for dynamic retreat
+    public static int paintLost = 0;
+    public static int lastPaint = 0;
 
     /**
      * Initialize global state at start of each turn.
@@ -118,6 +129,39 @@ public class G {
         enemies = null;
         nearbyTiles = null;
         nearbyRuins = null;
+
+        // Track paint lost for dynamic retreat (SPAARK pattern)
+        // Reset paintLost when we refuel (paint increases significantly)
+        if (paint > lastPaint + 20) {
+            paintLost = 0;  // Refueled, reset damage counter
+        } else if (lastPaint > paint) {
+            paintLost += lastPaint - paint;
+        }
+        lastPaint = paint;
+
+        // Mark current location as visited
+        markVisited(me);
+    }
+
+    /**
+     * Mark location as visited in the 30x30 grid.
+     */
+    public static void markVisited(MapLocation loc) {
+        int gx = loc.x >> 1;  // Divide by 2
+        int gy = loc.y >> 1;
+        if (gx >= 0 && gx < 30 && gy >= 0 && gy < 30) {
+            lastVisited[gx][gy] = round;
+        }
+    }
+
+    /**
+     * Check if location was recently visited.
+     */
+    public static boolean recentlyVisited(MapLocation loc, int threshold) {
+        int gx = loc.x >> 1;
+        int gy = loc.y >> 1;
+        if (gx < 0 || gx >= 30 || gy < 0 || gy >= 30) return false;
+        return round - lastVisited[gx][gy] < threshold;
     }
 
     /**
@@ -197,12 +241,12 @@ public class G {
 
     /**
      * Check if robot should retreat based on paint, chips, and ally count.
-     * SPAARK style: only retreat when ALL conditions are met (very conservative).
+     * SPAARK's actual logic: paint < 150 AND chips < 6000 AND allies < 9
      */
     public static boolean shouldRetreat() throws GameActionException {
-        if (paint >= RETREAT_PAINT) return false;
+        // SPAARK's exact conditions (Soldier.java line 145)
+        if (paint >= 150) return false;
         if (chips >= RETREAT_CHIPS) return false;
-        // Only retreat if few allies nearby too
         return getAllies().length < RETREAT_ALLY_THRESHOLD;
     }
 

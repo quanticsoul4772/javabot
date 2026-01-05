@@ -11,14 +11,79 @@ public class Soldier {
     private static MapLocation retreatTarget = null;
     private static MapLocation towerTarget = null;
     private static int towerAttackTime = 0;
+    private static int attacksOnTower = 0;  // Track attacks for double-hit micro
 
     // Cache our paint tower location (doesn't change)
     private static MapLocation cachedOurTower = null;
     private static boolean ourTowerCached = false;
 
+    // Paint drain tracking
+    private static int lastPaint = -1;
+
     public static void run() throws GameActionException {
-        if (G.round < 100) { earlyGameRush(); return; }
+        // Initialize paint tracking
+        if (lastPaint == -1) {
+            lastPaint = G.paint;
+        }
+        // STATE SNAPSHOT: Every 10 rounds
+        if (G.round % 10 == 0) {
+            System.out.println("STATE:" + G.round + ":SOLDIER:" + G.id +
+                ":pos=" + G.me +
+                ":paint=" + G.paint +
+                ":chips=" + G.chips +
+                ":mode=" + mode +
+                ":target=" + (mode == Mode.EXPLORE ? "center" :
+                             mode == Mode.BUILD_TOWER ? buildTarget :
+                             mode == Mode.RETREAT ? retreatTarget :
+                             mode == Mode.ATTACK_TOWER ? towerTarget : "none") +
+                ":allies=" + G.getAllies().length +
+                ":enemies=" + G.getEnemies().length +
+                ":towers=" + G.numTowers);
+
+            // ENEMY TRACKING: Log enemy positions and count by type
+            RobotInfo[] enemies = G.getEnemies();
+            if (enemies.length > 0) {
+                int soldiers = 0, splashers = 0, moppers = 0, towers = 0;
+                for (int i = enemies.length; --i >= 0;) {
+                    if (enemies[i].type == UnitType.SOLDIER) soldiers++;
+                    else if (enemies[i].type == UnitType.SPLASHER) splashers++;
+                    else if (enemies[i].type == UnitType.MOPPER) moppers++;
+                    else if (enemies[i].type.isTowerType()) towers++;
+                }
+
+                System.out.println("ENEMY_COUNT:" + G.round + ":" + G.id +
+                    ":total=" + enemies.length +
+                    ":soldiers=" + soldiers +
+                    ":splashers=" + splashers +
+                    ":moppers=" + moppers +
+                    ":towers=" + towers);
+
+                // Log first 3 enemies with details
+                StringBuilder enemyLog = new StringBuilder();
+                enemyLog.append("ENEMIES:" + G.round + ":" + G.id);
+                for (int i = Math.min(3, enemies.length); --i >= 0;) {
+                    enemyLog.append(":e").append(i).append("=")
+                            .append(enemies[i].type).append("@").append(enemies[i].location)
+                            .append("(p").append(enemies[i].paintAmount).append(")");
+                }
+                System.out.println(enemyLog.toString());
+            }
+        }
+
+        if (G.round < 50) { earlyGameRush(); return; }
+
+        Mode oldMode = mode;
         updateMode();
+
+        // DECISION TRACE: Log mode transitions
+        if (oldMode != mode) {
+            System.out.println("DECISION:" + G.round + ":SOLDIER:" + G.id +
+                ":from=" + oldMode +
+                ":to=" + mode +
+                ":paint=" + G.paint +
+                ":location=" + G.me);
+        }
+
         switch (mode) {
             case EXPLORE: explore(); break;
             case BUILD_TOWER: buildTower(); break;
@@ -27,9 +92,59 @@ public class Soldier {
             case ATTACK_TOWER: attackTower(); break;
         }
         paintCurrentTile();
+
+        // PAINT DRAIN TRACKING: Sample every 5 rounds
+        if (G.round % 5 == 0 && lastPaint > G.paint) {
+            int paintLost = lastPaint - G.paint;
+            PaintType terrain = G.rc.senseMapInfo(G.me).getPaint();
+
+            System.out.println("DRAIN:" + G.round + ":" + G.id +
+                ":terrain=" + (terrain.isAlly() ? "ALLY" : terrain.isEnemy() ? "ENEMY" : "NEUTRAL") +
+                ":lost=" + paintLost +
+                ":rate=" + (paintLost / 5) +
+                ":location=" + G.me +
+                ":mode=" + mode);
+        }
+
+        // CRITICAL: Low paint warning
+        if (G.paint < 50) {
+            System.out.println("CRITICAL:" + G.round + ":LOW_PAINT:" + G.id +
+                ":paint=" + G.paint +
+                ":pos=" + G.me +
+                ":mode=" + mode);
+        }
+
+        // DEATH LOG: Detect when paint hits 0 or very low
+        if (G.paint == 0) {
+            System.out.println("DEATH:" + G.round + ":SOLDIER:" + G.id +
+                ":paint=" + G.paint +
+                ":pos=" + G.me +
+                ":mode=" + mode +
+                ":last_target=" + (mode == Mode.BUILD_TOWER ? buildTarget :
+                                   mode == Mode.RETREAT ? retreatTarget :
+                                   mode == Mode.ATTACK_TOWER ? towerTarget : "none"));
+        }
+
+        // Update last paint for next turn
+        lastPaint = G.paint;
     }
 
     private static void earlyGameRush() throws GameActionException {
+        // RETREAT CHECK: SPAARK's 3 conditions
+        boolean shouldRetreat = G.paint < G.RETREAT_PAINT
+                                && G.chips < G.RETREAT_CHIPS
+                                && G.getAllies().length < G.RETREAT_ALLY_THRESHOLD;
+
+        if (shouldRetreat) {
+            if (mode != Mode.RETREAT) {
+                System.out.println("DECISION:" + G.round + ":SOLDIER:" + G.id +
+                    ":from=" + mode + ":to=RETREAT:reason=spaark_early:paint=" + G.paint);
+            }
+            mode = Mode.RETREAT;
+            retreat();
+            return;
+        }
+
         RobotInfo[] enemies = G.getEnemies();
 
         // Cache our tower once (save bytecode on repeated lookups)
@@ -86,6 +201,46 @@ public class Soldier {
     }
 
     private static void updateMode() throws GameActionException {
+        // RETREAT CHECK: Use SPAARK's 3 conditions (not just paint)
+        boolean shouldRetreat = G.paint < G.RETREAT_PAINT
+                                && G.chips < G.RETREAT_CHIPS
+                                && G.getAllies().length < G.RETREAT_ALLY_THRESHOLD;
+
+        if (shouldRetreat) {
+            if (mode != Mode.RETREAT) {
+                System.out.println("DECISION:" + G.round + ":SOLDIER:" + G.id +
+                    ":from=" + mode + ":to=RETREAT:reason=spaark_conditions" +
+                    ":paint=" + G.paint + ":chips=" + G.chips + ":allies=" + G.getAllies().length);
+            }
+            mode = Mode.RETREAT;
+            return;  // Don't check other modes
+        }
+
+        // Exit retreat if paint recovered
+        if (mode == Mode.RETREAT && G.paint > G.RETREAT_PAINT * 2) {
+            mode = Mode.EXPLORE;
+            retreatTarget = null;
+        }
+
+        // TOWER DEFENSE: Defend our towers if enemies nearby
+        MapLocation ourTower = POI.findNearestAllyTower();
+        if (ourTower != null) {
+            RobotInfo[] enemies = G.getEnemies();
+            for (int i = enemies.length; --i >= 0;) {
+                int distToOurTower = enemies[i].location.distanceSquaredTo(ourTower);
+                if (distToOurTower <= 25) {  // Enemy within 5 tiles of our tower
+                    // DEFEND - attack this enemy
+                    if (mode != Mode.ATTACK) {
+                        System.out.println("DECISION:" + G.round + ":SOLDIER:" + G.id +
+                            ":from=" + mode + ":to=ATTACK:reason=defend_tower:enemy=" + enemies[i].type);
+                    }
+                    mode = Mode.ATTACK;
+                    return;
+                }
+            }
+        }
+
+        // Attack enemy towers (but only if paint > threshold)
         RobotInfo[] enemies = G.getEnemies();
         for (int i = enemies.length; --i >= 0;) {
             if (enemies[i].type.isTowerType() && !wouldDieAttackingTower(enemies[i])) {
@@ -100,7 +255,6 @@ public class Soldier {
             }
             mode = Mode.EXPLORE; towerTarget = null;
         }
-        if (mode == Mode.RETREAT && G.paint > 80) { mode = Mode.EXPLORE; retreatTarget = null; }
         if (enemies.length > 0) {
             RobotInfo n = Micro.findNearestEnemy();
             if (n != null && G.me.distanceSquaredTo(n.location) <= 20) { mode = Mode.ATTACK; return; }
@@ -167,21 +321,85 @@ public class Soldier {
 
     private static void buildTower() throws GameActionException {
         if (buildTarget == null) { mode = Mode.EXPLORE; return; }
+
+        // BUILD PROGRESS: Log every 5 rounds
+        if (buildTimeout % 5 == 0) {
+            System.out.println("BUILD_PROGRESS:" + G.round + ":SOLDIER:" + G.id +
+                ":location=" + buildTarget +
+                ":buildTime=" + buildTimeout +
+                ":dist=" + G.me.distanceSquaredTo(buildTarget));
+        }
+
         if (G.rc.canSenseLocation(buildTarget)) {
             RobotInfo r = G.rc.senseRobotAtLocation(buildTarget);
-            if (r != null && r.type.isTowerType()) { POI.updateTower(buildTarget, r.team, r.type); mode = Mode.EXPLORE; buildTarget = null; return; }
+            if (r != null && r.type.isTowerType()) {
+                System.out.println("TOWER_COMPLETE:" + G.round + ":SOLDIER:" + G.id +
+                    ":location=" + buildTarget +
+                    ":type=" + r.type +
+                    ":buildTime=" + buildTimeout);
+                POI.updateTower(buildTarget, r.team, r.type);
+                mode = Mode.EXPLORE;
+                buildTarget = null;
+                buildTimeout = 0;
+                return;
+            }
         }
-        if (G.getEnemies().length > 0 && Micro.hasNearbyThreats()) { mode = Mode.EXPLORE; buildTarget = null; return; }
+
+        if (G.getEnemies().length > 0 && Micro.hasNearbyThreats()) {
+            System.out.println("BUILD_ABORT:" + G.round + ":SOLDIER:" + G.id +
+                ":reason=enemy_threat:buildTime=" + buildTimeout);
+            mode = Mode.EXPLORE;
+            buildTarget = null;
+            buildTimeout = 0;
+            return;
+        }
+
         if (G.me.distanceSquaredTo(buildTarget) > 2) { Nav.moveTo(buildTarget); return; }
-        if (tryCompleteTowerPattern()) { mode = Mode.EXPLORE; buildTarget = null; return; }
+
+        if (tryCompleteTowerPattern()) {
+            mode = Mode.EXPLORE;
+            buildTarget = null;
+            buildTimeout = 0;
+            return;
+        }
+
         tryPaintForTower();
+        buildTimeout++;
     }
 
     private static void retreat() throws GameActionException {
-        if (retreatTarget == null) { retreatTarget = POI.findNearestAllyPaintTower(); if (retreatTarget == null) retreatTarget = POI.findNearestAllyTower(); }
-        if (retreatTarget != null && G.me.distanceSquaredTo(retreatTarget) <= 2) { if (G.paint > G.RETREAT_PAINT * 2) { mode = Mode.EXPLORE; retreatTarget = null; } return; }
-        if (retreatTarget != null) Nav.moveTo(retreatTarget);
-        else { RobotInfo[] e = G.getEnemies(); if (e.length > 0) Nav.retreatFrom(e[0].location); else Nav.moveRandom(); }
+        if (retreatTarget == null) {
+            retreatTarget = POI.findNearestAllyPaintTower();
+            if (retreatTarget == null) retreatTarget = POI.findNearestAllyTower();
+        }
+
+        if (retreatTarget == null) {
+            // No tower found, just run away from enemies
+            RobotInfo[] e = G.getEnemies();
+            if (e.length > 0) Nav.retreatFrom(e[0].location);
+            else Nav.moveRandom();
+            return;
+        }
+
+        int dist = G.me.distanceSquaredTo(retreatTarget);
+
+        // Leave tower after refueling (don't block spawns)
+        if (dist <= 8 && G.paint > 100) {
+            mode = Mode.EXPLORE;
+            retreatTarget = null;
+            // Move away from tower
+            Direction away = retreatTarget.directionTo(G.me);
+            if (away != Direction.CENTER) {
+                Nav.moveTo(G.me.add(away).add(away).add(away));  // Move 3 tiles away
+            }
+            return;
+        }
+
+        // Move toward tower if far
+        if (dist > 8) {
+            Nav.moveTo(retreatTarget);
+        }
+        // Else stay at distance <= 8 and wait for refuel
     }
 
     private static void attack() throws GameActionException {
@@ -190,18 +408,30 @@ public class Soldier {
     }
 
     private static void attackTower() throws GameActionException {
-        if (towerTarget == null) { mode = Mode.EXPLORE; return; }
+        if (towerTarget == null) { mode = Mode.EXPLORE; attacksOnTower = 0; return; }
         RobotInfo ti = G.rc.canSenseLocation(towerTarget) ? G.rc.senseRobotAtLocation(towerTarget) : null;
         int towerRange = ti != null ? ti.type.actionRadiusSquared : 25;
         int dist = G.me.distanceSquaredTo(towerTarget);
 
-        // Simple fast tower attack: attack + kite
+        // DOUBLE-HIT MICRO: Stay in range for 2 attacks before retreating
         if (dist <= towerRange) {
-            if (G.rc.canAttack(towerTarget)) G.rc.attack(towerTarget);
-            Nav.retreatFrom(towerTarget);
-        } else if (G.rc.isActionReady()) {
-            Nav.moveTo(towerTarget);
-            if (G.rc.canAttack(towerTarget)) G.rc.attack(towerTarget);
+            if (G.rc.canAttack(towerTarget)) {
+                G.rc.attack(towerTarget);
+                attacksOnTower++;
+            }
+            if (attacksOnTower >= 2) {
+                Nav.retreatFrom(towerTarget);
+                attacksOnTower = 0;
+            }
+        } else {
+            attacksOnTower = 0;
+            if (G.rc.isActionReady()) {
+                Nav.moveTo(towerTarget);
+                if (G.rc.canAttack(towerTarget)) {
+                    G.rc.attack(towerTarget);
+                    attacksOnTower++;
+                }
+            }
         }
     }
 

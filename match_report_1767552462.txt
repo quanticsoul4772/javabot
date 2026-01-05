@@ -1,0 +1,29 @@
+Starting a Gradle Daemon (subsequent builds will be faster)
+> Task :compileJava UP-TO-DATE
+> Task :compileScala NO-SOURCE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :compileTestJava
+> Task :compileTestScala NO-SOURCE
+> Task :processTestResources NO-SOURCE
+> Task :testClasses
+> Task :test
+> Task :check
+> Task :unpackClient UP-TO-DATE
+> Task :checkNewVersion
+> Task :build
+
+> Task :run
+[server] -------------------- Match Starting --------------------
+[server] spaark2 vs. SPAARK on DefaultSmall
+[B: #13774@4] Bytecode overflow! (Round 3, SOLDIER, [13, 15])
+[B: #13640@4] Bytecode overflow! (Round 3, SOLDIER, [11, 15])
+[B: #13778@12] Bytecode overflow! (Round 11, SOLDIER, [15, 14])
+[server]                     SPAARK (B) wins (round 125)
+[server] Reason: The winning team destroyed all of the enemy team's units.
+[server] -------------------- Match Finished --------------------
+
+BUILD SUCCESSFUL in 13s
+7 actionable tasks: 4 executed, 3 up-to-date

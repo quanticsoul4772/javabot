@@ -33,6 +33,9 @@ public class Tower {
     private static boolean isPaintTower = false;
     private static boolean towerTypeChecked = false;
 
+    // Economy tracking
+    private static int lastChips = 0;
+
     /**
      * Main tower logic - called every turn.
      */
@@ -52,7 +55,35 @@ public class Tower {
             spawnLocsInitialized = true;
         }
 
-        // Attack enemies in range
+        // ECONOMY TRACKING: Every 10 rounds
+        if (G.round % 10 == 0) {
+            int income = (G.chips - lastChips) / 10;
+            System.out.println("ECONOMY:" + G.round +
+                ":TOWER:" + G.id +
+                ":chips=" + G.chips +
+                ":income=" + income +
+                ":towers=" + G.rc.getNumberTowers() +
+                ":units=" + G.getAllies().length +
+                ":paint=" + G.paint);
+            lastChips = G.chips;
+        }
+
+        // Upgrade tower while maintaining buffer
+        int level = G.type == UnitType.LEVEL_ONE_PAINT_TOWER || G.type == UnitType.LEVEL_ONE_MONEY_TOWER || G.type == UnitType.LEVEL_ONE_DEFENSE_TOWER ? 0 :
+                   G.type == UnitType.LEVEL_TWO_PAINT_TOWER || G.type == UnitType.LEVEL_TWO_MONEY_TOWER || G.type == UnitType.LEVEL_TWO_DEFENSE_TOWER ? 1 : 2;
+
+        int upgradeCost = (level == 0 ? 2500 : 5000);
+        // Upgrade if we can afford it (no buffer requirement - priority)
+        while (G.rc.canUpgradeTower(G.me)) {
+            System.out.println("UPGRADE:" + G.round + ":TOWER:" + G.id +
+                ":from=L" + (level + 1) +
+                ":cost=" + upgradeCost +
+                ":chips_before=" + G.rc.getMoney());
+            G.rc.upgradeTower(G.me);
+            level++;
+        }
+
+        // Attack enemies in range (AFTER upgrading for higher damage)
         tryAttack();
 
         // Try to spawn units
@@ -141,6 +172,12 @@ public class Tower {
 
         // Execute attack
         if (best != null && G.rc.canAttack(best.location)) {
+            // TOWER ATTACK LOG
+            System.out.println("TOWER_ATTACK:" + G.round + ":TOWER:" + G.id +
+                ":target=" + best.type + "@" + best.location +
+                ":target_paint=" + best.paintAmount +
+                ":damage=" + G.type.attackStrength +
+                ":score=" + bestScore);
             G.rc.attack(best.location);
         }
     }
@@ -149,7 +186,14 @@ public class Tower {
      * Try to spawn units - SPAARK-style balanced spawning.
      */
     private static void trySpawn() throws GameActionException {
-        // SPAARK weights - tuned for competitive play
+        // Debug: Log spawn attempt every 10 rounds
+        if (G.round % 10 == 0) {
+            System.out.println("SPAWN_CHECK:" + G.round + ":TOWER:" + G.id +
+                ":chips=" + G.rc.getMoney() +
+                ":last_spawn=" + lastSpawnRound);
+        }
+
+        // SPAARK weights
         double soldierWeight = 1.5 - G.rc.getNumberTowers() * 0.05;
         double splasherWeight = 0.2 + G.allyPaintTowers * 0.3;
         double mopperWeight = 1.2;
@@ -158,7 +202,7 @@ public class Tower {
         splasherWeight /= sum;
         mopperWeight /= sum;
 
-        // Debt-based selection (SPAARK style)
+        // Debt-based selection
         double soldier = soldierDebt + soldierWeight - soldierSpawns;
         double splasher = splasherDebt + splasherWeight - splasherSpawns;
         double mopper = mopperDebt + mopperWeight - mopperSpawns;
@@ -172,38 +216,26 @@ public class Tower {
             toSpawn = UnitType.SPLASHER;
         }
 
-        // First 3 spawns MUST be soldiers (SPAARK line 147)
+        // First 3 spawns MUST be soldiers
         if ((G.round < 50 || !isPaintTower) && totalSpawns < 3) {
             toSpawn = UnitType.SOLDIER;
         }
 
-        // Check spawn conditions (SPAARK line 153-154)
-        // CRITICAL: Always spawn when round < 10!
-        boolean hasEnoughChips = G.rc.getMoney() - toSpawn.moneyCost >= 900;
-        boolean shouldSpawn;
-        if (G.round < 10) {
-            // Always spawn in early game
-            shouldSpawn = true;
-        } else if (G.rc.getNumberTowers() >= 25) {
-            // Always spawn when maxed towers
-            shouldSpawn = true;
-        } else if (G.round < 100) {
-            // Before round 100: spawn if we have chips
-            shouldSpawn = hasEnoughChips;
-        } else {
-            // After round 100: spawn if chips AND (didn't spawn recently AND few allies)
-            int nearbyAllies = 0;
-            try { nearbyAllies = G.getAllies().length; } catch (Exception e) {}
-            shouldSpawn = hasEnoughChips && (lastSpawnRound + 1 < G.round && nearbyAllies < 4);
+        // VERY AGGRESSIVE SPAWNING: spawn if we can afford it
+        if (G.rc.getMoney() < toSpawn.moneyCost) {
+            return;  // Can't afford
         }
 
-        if (!shouldSpawn) {
-            return;
+        // Log spawn decision
+        if (G.round % 10 == 0) {
+            System.out.println("SPAWN_ATTEMPT:" + G.round + ":TOWER:" + G.id +
+                ":trying=" + toSpawn +
+                ":chips=" + G.rc.getMoney());
         }
 
         // Try to spawn
         if (trySpawnUnit(toSpawn)) {
-            // Update debt accumulators (SPAARK style)
+            // Update debt accumulators
             soldierDebt += soldierWeight;
             splasherDebt += splasherWeight;
             mopperDebt += mopperWeight;
@@ -215,12 +247,23 @@ public class Tower {
      * Uses sorted spawn locations (toward center) like SPAARK.
      */
     private static boolean trySpawnUnit(UnitType type) throws GameActionException {
+        int blockedCount = 0;
+
         // Try spawn locations in order (sorted toward center)
         for (int i = 0; i < spawnLocs.length; i++) {
             MapLocation spawnLoc = spawnLocs[i];
 
             if (G.rc.canBuildRobot(type, spawnLoc)) {
                 G.rc.buildRobot(type, spawnLoc);
+
+                // SPAWN LOG
+                System.out.println("SPAWN:" + G.round + ":TOWER:" + G.id +
+                    ":unit=" + type +
+                    ":location=" + spawnLoc +
+                    ":total_spawns=" + (totalSpawns + 1) +
+                    ":soldiers=" + (type == UnitType.SOLDIER ? soldierSpawns + 1 : soldierSpawns) +
+                    ":splashers=" + (type == UnitType.SPLASHER ? splasherSpawns + 1 : splasherSpawns) +
+                    ":moppers=" + (type == UnitType.MOPPER ? mopperSpawns + 1 : mopperSpawns));
 
                 // Update spawn counts (SPAARK style)
                 totalSpawns++;
@@ -232,8 +275,18 @@ public class Tower {
                     default: break;
                 }
                 return true;
+            } else {
+                blockedCount++;
             }
         }
+
+        // Log spawn failure
+        if (G.round % 10 == 0) {
+            System.out.println("SPAWN_FAILED:" + G.round + ":TOWER:" + G.id +
+                ":blocked=" + blockedCount + "/12" +
+                ":trying=" + type);
+        }
+
         return false;
     }
 

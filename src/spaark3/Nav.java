@@ -17,15 +17,7 @@ public class Nav {
     private static boolean bugRotateRight;
     private static int bugTurns;
 
-    // Boids constants
-    private static final int SEPARATION_RADIUS = 9;   // Avoid crowding
-    private static final int COHESION_RADIUS = 25;    // Stay near group
-
-    // Movement weights
-    private static final int SEPARATION_WEIGHT = 3;
-    private static final int COHESION_WEIGHT = 1;
-
-    // Debug tracking
+    // Debug tracking (can be removed for production)
     public static String lastNavInfo = "";
 
     /**
@@ -196,72 +188,6 @@ public class Nav {
         }
 
         return targetDir;
-    }
-
-    /**
-     * Compute Boids flocking vector from nearby allies.
-     * Three rules: Separation, Alignment (implicit), Cohesion.
-     */
-    private static Direction computeBoidsVector(RobotInfo[] allies) {
-        if (allies.length == 0) return Direction.CENTER;
-
-        int sepX = 0, sepY = 0;  // Separation vector
-        int cohX = 0, cohY = 0;  // Cohesion center
-        int cohCount = 0;
-
-        MapLocation myLoc = G.me;
-        int myX = myLoc.x;
-        int myY = myLoc.y;
-
-        // Reversed loop for bytecode efficiency
-        for (int i = allies.length; --i >= 0;) {
-            RobotInfo ally = allies[i];
-            if (ally.type.isTowerType()) continue;  // Skip towers
-
-            MapLocation allyLoc = ally.location;
-            int dx = allyLoc.x - myX;
-            int dy = allyLoc.y - myY;
-            int distSq = dx * dx + dy * dy;
-
-            // Separation: push away from close allies
-            if (distSq < SEPARATION_RADIUS && distSq > 0) {
-                sepX -= dx;
-                sepY -= dy;
-            }
-
-            // Cohesion: attract to group center
-            if (distSq < COHESION_RADIUS) {
-                cohX += allyLoc.x;
-                cohY += allyLoc.y;
-                cohCount++;
-            }
-        }
-
-        // Combine vectors
-        int finalX = sepX * SEPARATION_WEIGHT;
-        int finalY = sepY * SEPARATION_WEIGHT;
-
-        if (cohCount > 0) {
-            int centerX = cohX / cohCount;
-            int centerY = cohY / cohCount;
-            finalX += (centerX - myX) * COHESION_WEIGHT;
-            finalY += (centerY - myY) * COHESION_WEIGHT;
-        }
-
-        return G.directionFromVector(finalX, finalY);
-    }
-
-    /**
-     * Blend two directions with given weights.
-     */
-    private static Direction blendDirections(Direction d1, Direction d2, double w1, double w2) {
-        if (d1 == null || d1 == Direction.CENTER) return d2;
-        if (d2 == null || d2 == Direction.CENTER) return d1;
-
-        int dx = (int)(d1.dx * w1 + d2.dx * w2);
-        int dy = (int)(d1.dy * w1 + d2.dy * w2);
-
-        return G.directionFromVector(dx, dy);
     }
 
     /**

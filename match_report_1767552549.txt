@@ -1,0 +1,129 @@
+> Task :compileJava UP-TO-DATE
+> Task :compileScala NO-SOURCE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+> Task :compileTestScala NO-SOURCE
+> Task :processTestResources NO-SOURCE
+> Task :testClasses UP-TO-DATE
+> Task :test UP-TO-DATE
+> Task :check UP-TO-DATE
+> Task :unpackClient UP-TO-DATE
+> Task :checkNewVersion
+> Task :build UP-TO-DATE
+
+> Task :run
+[server] -------------------- Match Starting --------------------
+[server] SPAARK vs. examplefuncsplayer on DefaultSmall
+[B: #2@1] I'm alive
+[B: #2@1] BUILT A MOPPER
+[B: #4@1] I'm alive
+[B: #4@1] BUILT A MOPPER
+[B: #2@2] BUILT A SOLDIER
+[B: #4@2] BUILT A SOLDIER
+[B: #13782@2] I'm alive
+[B: #12449@2] I'm alive
+[B: #2@3] BUILT A MOPPER
+[B: #4@3] BUILT A MOPPER
+[B: #13774@3] I'm alive
+[B: #13640@3] I'm alive
+[B: #2@4] BUILT A MOPPER
+[B: #4@4] BUILT A MOPPER
+[A: #11897@4] Bytecode overflow! (Round 3, SOLDIER, [6, 4])
+[A: #12049@4] Bytecode overflow! (Round 3, SOLDIER, [10, 4])
+[B: #13054@4] I'm alive
+[B: #13778@4] I'm alive
+[B: #13774@5] Trying to build a tower at [17, 12]
+[B: #11399@5] I'm alive
+[B: #10260@5] I'm alive
+[B: #13782@7] Mop Swing! Booyah!
+[B: #12449@7] Mop Swing! Booyah!
+[B: #13640@7] Trying to build a tower at [14, 17]
+[B: #13054@9] Mop Swing! Booyah!
+[B: #13778@9] Mop Swing! Booyah!
+[B: #11399@10] Mop Swing! Booyah!
+[B: #10260@10] Mop Swing! Booyah!
+[B: #2@12] BUILT A MOPPER
+[B: #13782@12] Mop Swing! Booyah!
+[B: #12449@12] Mop Swing! Booyah!
+[A: #11718@12] Bytecode overflow! (Round 11, SOLDIER, [5, 5])
+[B: #13560@13] I'm alive
+[B: #13054@14] Mop Swing! Booyah!
+[B: #13778@14] Mop Swing! Booyah!
+[B: #11399@15] Mop Swing! Booyah!
+[B: #10260@15] Mop Swing! Booyah!
+[B: #13560@18] Mop Swing! Booyah!
+[B: #2@20] BUILT A MOPPER
+[B: #13782@20] Mop Swing! Booyah!
+[B: #12449@20] Mop Swing! Booyah!
+[B: #10741@21] I'm alive
+[B: #13054@22] Mop Swing! Booyah!
+[B: #13778@22] Mop Swing! Booyah!
+[B: #11399@23] Mop Swing! Booyah!
+[B: #10260@23] Mop Swing! Booyah!
+[B: #13560@23] Mop Swing! Booyah!
+[B: #10741@26] Mop Swing! Booyah!
+[B: #13560@31] Mop Swing! Booyah!
+[B: #10741@31] Mop Swing! Booyah!
+[B: #2@32] BUILT A MOPPER
+[B: #12449@32] Mop Swing! Booyah!
+[B: #12711@33] I'm alive
+[B: #13778@34] Mop Swing! Booyah!
+[B: #10260@35] Mop Swing! Booyah!
+[B: #13054@37] Mop Swing! Booyah!
+[B: #13778@37] Mop Swing! Booyah!
+[B: #10260@38] Mop Swing! Booyah!
+[B: #12711@38] Mop Swing! Booyah!
+[B: #10741@39] Mop Swing! Booyah!
+[B: #2@40] BUILT A MOPPER
+[B: #12606@41] I'm alive
+[B: #12449@43] Mop Swing! Booyah!
+[B: #13560@43] Mop Swing! Booyah!
+[B: #12711@43] Mop Swing! Booyah!
+[B: #13778@45] Mop Swing! Booyah!
+[B: #13560@46] Mop Swing! Booyah!
+[B: #12606@46] Mop Swing! Booyah!
+[B: #12449@47] Mop Swing! Booyah!
+[B: #11399@49] Mop Swing! Booyah!
+[B: #2@50] BUILT A MOPPER
+[B: #10741@51] Mop Swing! Booyah!
+[B: #12711@51] Mop Swing! Booyah!
+[B: #12606@51] Mop Swing! Booyah!
+[B: #12714@51] I'm alive
+[B: #11399@52] Mop Swing! Booyah!
+[B: #12714@56] Mop Swing! Booyah!
+[B: #11399@57] Mop Swing! Booyah!
+[B: #12606@59] Mop Swing! Booyah!
+[B: #12714@61] Mop Swing! Booyah!
+[B: #2@63] BUILT A MOPPER
+[B: #10389@64] I'm alive
+[B: #12714@69] Mop Swing! Booyah!
+[B: #10389@69] Mop Swing! Booyah!
+[A: #13505@71] Bytecode overflow! (Round 70, MOPPER, [5, 5])
+[B: #12711@73] Mop Swing! Booyah!
+[B: #10389@74] Mop Swing! Booyah!
+[B: #2@80] BUILT A SOLDIER
+[B: #12606@81] Mop Swing! Booyah!
+[B: #12816@81] I'm alive
+[B: #10389@82] Mop Swing! Booyah!
+[B: #12714@89] Mop Swing! Booyah!
+[B: #12606@91] Mop Swing! Booyah!
+[B: #12714@92] Mop Swing! Booyah!
+[B: #12606@93] Mop Swing! Booyah!
+[B: #10389@94] Mop Swing! Booyah!
+[B: #12606@95] Mop Swing! Booyah!
+[B: #10389@102] Mop Swing! Booyah!
+[B: #12606@103] Mop Swing! Booyah!
+[B: #10389@105] Mop Swing! Booyah!
+[B: #10389@109] Mop Swing! Booyah!
+[B: #10389@112] Mop Swing! Booyah!
+[B: #12606@127] Mop Swing! Booyah!
+[B: #12606@129] Mop Swing! Booyah!
+[server]                     SPAARK (A) wins (round 132)
+[server] Reason: The winning team destroyed all of the enemy team's units.
+[server] -------------------- Match Finished --------------------
+
+BUILD SUCCESSFUL in 3s
+7 actionable tasks: 2 executed, 5 up-to-date

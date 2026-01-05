@@ -164,6 +164,33 @@ public class POI {
         return best;
     }
 
+    /**
+     * Find Nth closest ally tower (for distributing retreats).
+     */
+    public static MapLocation findNthClosestAllyTower(int n) {
+        // Find all ally towers sorted by distance
+        int allyCount = 0;
+        for (int i = towerCount; --i >= 0;) {
+            if (towerTeam[i] == 1) allyCount++;
+        }
+
+        if (allyCount == 0) return null;
+        if (n >= allyCount) n = allyCount - 1;  // Clamp to available
+
+        // Simple: just return (n mod allyCount)th tower
+        int index = 0;
+        for (int i = towerCount; --i >= 0;) {
+            if (towerTeam[i] == 1) {
+                if (index == n) {
+                    return new MapLocation(towerX[i], towerY[i]);
+                }
+                index++;
+            }
+        }
+
+        return findNearestAllyTower();  // Fallback
+    }
+
     // Cached symmetry prediction (computed once)
     private static MapLocation cachedEnemyPrediction = null;
     private static int lastPredictionRound = -100;

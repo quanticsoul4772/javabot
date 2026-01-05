@@ -1,0 +1,194 @@
+> Task :compileJava UP-TO-DATE
+> Task :compileScala NO-SOURCE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+> Task :compileTestScala NO-SOURCE
+> Task :processTestResources NO-SOURCE
+> Task :testClasses UP-TO-DATE
+> Task :test UP-TO-DATE
+> Task :check UP-TO-DATE
+> Task :unpackClient UP-TO-DATE
+> Task :checkNewVersion
+> Task :build UP-TO-DATE
+
+> Task :run
+[server] -------------------- Match Starting --------------------
+[server] omnom vs. SPAARK on DefaultSmall
+[A: #1@1] INIT:1:LEVEL_TWO_PAINT_TOWER:1:pos=[5, 2]
+[A: #1@1] SPAWN:1:TOWER:1:unit=SOLDIER:location=[5, 4]:total=1:soldiers=1:splashers=0:moppers=0
+[A: #3@1] INIT:1:LEVEL_TWO_MONEY_TOWER:3:pos=[10, 2]
+[A: #3@1] SPAWN:1:TOWER:3:unit=SOLDIER:location=[10, 4]:total=1:soldiers=1:splashers=0:moppers=0
+[A: #1@2] SPAWN:2:TOWER:1:unit=SOLDIER:location=[6, 3]:total=2:soldiers=2:splashers=0:moppers=0
+[A: #3@2] SPAWN:2:TOWER:3:unit=SOLDIER:location=[10, 3]:total=2:soldiers=2:splashers=0:moppers=0
+[A: #11577@2] INIT:2:SOLDIER:11577:pos=[5, 4]
+[A: #12772@2] INIT:2:SOLDIER:12772:pos=[10, 4]
+[A: #11897@3] INIT:3:SOLDIER:11897:pos=[6, 3]
+[A: #12049@3] INIT:3:SOLDIER:12049:pos=[10, 3]
+[B: #13774@4] Bytecode overflow! (Round 3, SOLDIER, [13, 15])
+[B: #13640@4] Bytecode overflow! (Round 3, SOLDIER, [11, 15])
+[A: #11577@7] DECISION:7:SOLDIER:11577:from=EXPLORE:to=ATTACK:paint=167
+[A: #12772@7] DECISION:7:SOLDIER:12772:from=EXPLORE:to=ATTACK:paint=164
+[A: #11897@7] DECISION:7:SOLDIER:11897:from=EXPLORE:to=ATTACK:paint=175
+[A: #12049@7] DECISION:7:SOLDIER:12049:from=EXPLORE:to=ATTACK:paint=179
+[A: #1@10] ECONOMY:10:TOWER:1:chips=1800:income=1800:towers=2:units=0:paint=200
+[A: #1@10] SPAWN:10:TOWER:1:unit=SOLDIER:location=[5, 4]:total=3:soldiers=3:splashers=0:moppers=0
+[A: #3@10] ECONOMY:10:TOWER:3:chips=1550:income=1550:towers=2:units=0:paint=100
+[A: #11577@10] STATE:10:SOLDIER:11577:pos=[13, 11]:paint=153:chips=1550:mode=EXPLORE:allies=3:enemies=4:towers=1
+[A: #11577@10] ENEMY_COUNT:10:11577:total=4:soldiers=4:splashers=0:moppers=0:towers=0
+[A: #12772@10] STATE:10:SOLDIER:12772:pos=[12, 11]:paint=158:chips=1550:mode=EXPLORE:allies=3:enemies=4:towers=1
+[A: #12772@10] ENEMY_COUNT:10:12772:total=4:soldiers=4:splashers=0:moppers=0:towers=0
+[A: #11897@10] STATE:10:SOLDIER:11897:pos=[12, 10]:paint=159:chips=1550:mode=EXPLORE:allies=3:enemies=3:towers=2
+[A: #11897@10] ENEMY_COUNT:10:11897:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #12049@10] STATE:10:SOLDIER:12049:pos=[11, 10]:paint=167:chips=1550:mode=EXPLORE:allies=3:enemies=2:towers=1
+[A: #12049@10] ENEMY_COUNT:10:12049:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[A: #13054@11] INIT:11:SOLDIER:13054:pos=[5, 4]
+[B: #13778@12] Bytecode overflow! (Round 11, SOLDIER, [15, 14])
+[A: #12772@13] DECISION:13:SOLDIER:12772:from=ATTACK:to=ATTACK_TOWER:paint=146
+[A: #13054@13] DECISION:13:SOLDIER:13054:from=EXPLORE:to=ATTACK:paint=190
+[A: #1@20] ECONOMY:20:TOWER:1:chips=1850:income=50:towers=2:units=0:paint=100
+[A: #1@20] SPAWN:20:TOWER:1:unit=MOPPER:location=[5, 4]:total=4:soldiers=3:splashers=0:moppers=1
+[A: #3@20] ECONOMY:20:TOWER:3:chips=1550:income=0:towers=2:units=1:paint=100
+[A: #11577@20] STATE:20:SOLDIER:11577:pos=[17, 8]:paint=88:chips=1550:mode=EXPLORE:allies=2:enemies=3:towers=1
+[A: #11577@20] ENEMY_COUNT:20:11577:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #12772@20] STATE:20:SOLDIER:12772:pos=[15, 19]:paint=109:chips=1550:mode=EXPLORE:allies=0:enemies=2:towers=1
+[A: #12772@20] ENEMY_COUNT:20:12772:total=2:soldiers=0:splashers=0:moppers=1:towers=1
+[A: #11897@20] STATE:20:SOLDIER:11897:pos=[18, 7]:paint=90:chips=1550:mode=EXPLORE:allies=2:enemies=3:towers=2
+[A: #11897@20] ENEMY_COUNT:20:11897:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #12049@20] STATE:20:SOLDIER:12049:pos=[18, 9]:paint=99:chips=1550:mode=EXPLORE:allies=2:enemies=3:towers=1
+[A: #12049@20] ENEMY_COUNT:20:12049:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #13054@20] STATE:20:SOLDIER:13054:pos=[12, 5]:paint=159:chips=1550:mode=EXPLORE:allies=2:enemies=1:towers=2
+[A: #13054@20] ENEMY_COUNT:20:13054:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #11399@21] INIT:21:MOPPER:11399:pos=[5, 4]
+[A: #11897@22] DECISION:22:SOLDIER:11897:from=ATTACK:to=ATTACK_TOWER:paint=74
+[A: #11577@27] DECISION:27:SOLDIER:11577:from=ATTACK:to=RETREAT:paint=46
+[A: #12049@27] DECISION:27:SOLDIER:12049:from=ATTACK:to=ATTACK_TOWER:paint=57
+[A: #11897@28] DECISION:28:SOLDIER:11897:from=ATTACK_TOWER:to=RETREAT:paint=48
+[A: #1@30] ECONOMY:30:TOWER:1:chips=1850:income=0:towers=2:units=1:paint=100
+[A: #1@30] SPAWN:30:TOWER:1:unit=MOPPER:location=[6, 3]:total=5:soldiers=3:splashers=0:moppers=2
+[A: #3@30] ECONOMY:30:TOWER:3:chips=1550:income=0:towers=2:units=2:paint=100
+[A: #11577@30] STATE:30:SOLDIER:11577:pos=[12, 5]:paint=44:chips=1550:mode=EXPLORE:allies=2:enemies=1:towers=2
+[A: #11577@30] ENEMY_COUNT:30:11577:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #11897@30] STATE:30:SOLDIER:11897:pos=[17, 11]:paint=42:chips=1550:mode=EXPLORE:allies=1:enemies=3:towers=2
+[A: #11897@30] ENEMY_COUNT:30:11897:total=3:soldiers=1:splashers=0:moppers=1:towers=1
+[A: #12049@30] STATE:30:SOLDIER:12049:pos=[16, 10]:paint=44:chips=1550:mode=EXPLORE:allies=2:enemies=3:towers=1
+[A: #12049@30] ENEMY_COUNT:30:12049:total=3:soldiers=1:splashers=0:moppers=1:towers=1
+[A: #12049@30] DECISION:30:SOLDIER:12049:from=ATTACK_TOWER:to=RETREAT:paint=44
+[A: #13054@30] STATE:30:SOLDIER:13054:pos=[13, 8]:paint=109:chips=1550:mode=EXPLORE:allies=3:enemies=4:towers=2
+[A: #13054@30] ENEMY_COUNT:30:13054:total=4:soldiers=3:splashers=0:moppers=1:towers=0
+[A: #13054@31] DECISION:31:SOLDIER:13054:from=ATTACK:to=ATTACK_TOWER:paint=107
+[A: #13560@31] INIT:31:MOPPER:13560:pos=[6, 3]
+[A: #1@40] ECONOMY:40:TOWER:1:chips=1850:income=0:towers=2:units=3:paint=100
+[A: #3@40] ECONOMY:40:TOWER:3:chips=1850:income=300:towers=2:units=3:paint=100
+[A: #11577@40] STATE:40:SOLDIER:11577:pos=[6, 2]:paint=34:chips=1850:mode=EXPLORE:allies=4:enemies=0:towers=2
+[A: #12049@40] STATE:40:SOLDIER:12049:pos=[11, 4]:paint=34:chips=1850:mode=EXPLORE:allies=1:enemies=3:towers=1
+[A: #12049@40] ENEMY_COUNT:40:12049:total=3:soldiers=3:splashers=0:moppers=0:towers=0
+[A: #1@50] ECONOMY:50:TOWER:1:chips=2150:income=300:towers=2:units=4:paint=200
+[A: #3@50] ECONOMY:50:TOWER:3:chips=2150:income=300:towers=2:units=2:paint=100
+[A: #11577@50] STATE:50:SOLDIER:11577:pos=[5, 5]:paint=17:chips=2150:mode=EXPLORE:allies=3:enemies=1:towers=2
+[A: #11577@50] ENEMY_COUNT:50:11577:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #12049@50] STATE:50:SOLDIER:12049:pos=[8, 1]:paint=20:chips=2150:mode=EXPLORE:allies=4:enemies=0:towers=2
+[A: #1@60] ECONOMY:60:TOWER:1:chips=2300:income=150:towers=1:units=3:paint=300
+[A: #1@60] SPAWN:60:TOWER:1:unit=SPLASHER:location=[7, 2]:total=6:soldiers=3:splashers=1:moppers=2
+[A: #11577@60] STATE:60:SOLDIER:11577:pos=[5, 1]:paint=0:chips=1900:mode=EXPLORE:allies=4:enemies=1:towers=2
+[A: #11577@60] ENEMY_COUNT:60:11577:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #12049@60] STATE:60:SOLDIER:12049:pos=[10, 0]:paint=7:chips=1900:mode=EXPLORE:allies=1:enemies=2:towers=2
+[A: #12049@60] ENEMY_COUNT:60:12049:total=2:soldiers=2:splashers=0:moppers=0:towers=0
+[B: #11560@60] Bytecode overflow! (Round 59, SOLDIER, [12, 10])
+[A: #13107@61] INIT:61:SPLASHER:13107:pos=[7, 2]
+[B: #12711@66] Bytecode overflow! (Round 65, MOPPER, [13, 14])
+[A: #1@70] ECONOMY:70:TOWER:1:chips=1900:income=-400:towers=1:units=4:paint=100
+[A: #1@70] SPAWN:70:TOWER:1:unit=MOPPER:location=[5, 3]:total=7:soldiers=3:splashers=1:moppers=3
+[A: #11577@70] STATE:70:SOLDIER:11577:pos=[5, 1]:paint=0:chips=1600:mode=EXPLORE:allies=5:enemies=1:towers=2
+[A: #11577@70] ENEMY_COUNT:70:11577:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #12049@70] STATE:70:SOLDIER:12049:pos=[11, 2]:paint=0:chips=1600:mode=EXPLORE:allies=1:enemies=4:towers=2
+[A: #12049@70] ENEMY_COUNT:70:12049:total=4:soldiers=3:splashers=0:moppers=1:towers=0
+[A: #10988@71] INIT:71:MOPPER:10988:pos=[5, 3]
+[A: #1@80] ECONOMY:80:TOWER:1:chips=1600:income=-300:towers=1:units=3:paint=100
+[A: #1@90] ECONOMY:90:TOWER:1:chips=1600:income=0:towers=1:units=3:paint=200
+[A: #1@90] SPAWN:90:TOWER:1:unit=SOLDIER:location=[6, 3]:total=8:soldiers=4:splashers=1:moppers=3
+[A: #12208@91] INIT:91:SOLDIER:12208:pos=[6, 3]
+[A: #12208@91] DECISION:91:SOLDIER:12208:from=EXPLORE:to=ATTACK:paint=200
+[A: #12208@100] STATE:100:SOLDIER:12208:pos=[12, 0]:paint=133:chips=1350:mode=EXPLORE:allies=0:enemies=1:towers=1
+[A: #12208@100] ENEMY_COUNT:100:12208:total=1:soldiers=1:splashers=0:moppers=0:towers=0
+[A: #12208@103] DECISION:103:SOLDIER:12208:from=ATTACK:to=ATTACK_TOWER:paint=114
+[B: #12711@152] Unexpected Exception
+[B: #12711@152] java.lang.ArithmeticException: / by zero
+[B: #12711@152] 	at SPAARK.Motion.exploreRandomlyLoc(Motion.java:298)
+[B: #12711@152] 	at SPAARK.Mopper.exploreMoveScores(Mopper.java:936)
+[B: #12711@152] 	at SPAARK.Mopper.run(Mopper.java:88)
+[B: #12711@152] 	at SPAARK.Robot.run(Robot.java:81)
+[B: #12711@152] 	at SPAARK.RobotPlayer.run(RobotPlayer.java:78)
+[B: #12711@152] 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+[B: #12711@152] 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+[B: #12711@152] 	at battlecode.instrumenter.SandboxedRobotPlayer.loadAndRunPlayer(SandboxedRobotPlayer.java:275)
+[B: #12711@152] 	at battlecode.instrumenter.SandboxedRobotPlayer.lambda$new$2(SandboxedRobotPlayer.java:184)
+[B: #12711@152] 	at java.base/java.lang.Thread.run(Thread.java:1583)
+[B: #12711@154] Unexpected Exception
+[B: #12711@154] java.lang.ArithmeticException: / by zero
+[B: #12711@154] 	at SPAARK.Motion.exploreRandomlyLoc(Motion.java:298)
+[B: #12711@154] 	at SPAARK.Mopper.exploreMoveScores(Mopper.java:936)
+[B: #12711@154] 	at SPAARK.Mopper.run(Mopper.java:88)
+[B: #12711@154] 	at SPAARK.Robot.run(Robot.java:81)
+[B: #12711@154] 	at SPAARK.RobotPlayer.run(RobotPlayer.java:78)
+[B: #12711@154] 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+[B: #12711@154] 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+[B: #12711@154] 	at battlecode.instrumenter.SandboxedRobotPlayer.loadAndRunPlayer(SandboxedRobotPlayer.java:275)
+[B: #12711@154] 	at battlecode.instrumenter.SandboxedRobotPlayer.lambda$new$2(SandboxedRobotPlayer.java:184)
+[B: #12711@154] 	at java.base/java.lang.Thread.run(Thread.java:1583)
+[B: #12711@155] Unexpected Exception
+[B: #12711@155] java.lang.ArithmeticException: / by zero
+[B: #12711@155] 	at SPAARK.Motion.exploreRandomlyLoc(Motion.java:298)
+[B: #12711@155] 	at SPAARK.Mopper.exploreMoveScores(Mopper.java:936)
+[B: #12711@155] 	at SPAARK.Mopper.run(Mopper.java:88)
+[B: #12711@155] 	at SPAARK.Robot.run(Robot.java:81)
+[B: #12711@155] 	at SPAARK.RobotPlayer.run(RobotPlayer.java:78)
+[B: #12711@155] 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+[B: #12711@155] 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+[B: #12711@155] 	at battlecode.instrumenter.SandboxedRobotPlayer.loadAndRunPlayer(SandboxedRobotPlayer.java:275)
+[B: #12711@155] 	at battlecode.instrumenter.SandboxedRobotPlayer.lambda$new$2(SandboxedRobotPlayer.java:184)
+[B: #12711@155] 	at java.base/java.lang.Thread.run(Thread.java:1583)
+[B: #12711@156] Unexpected Exception
+[B: #12711@156] java.lang.ArithmeticException: / by zero
+[B: #12711@156] 	at SPAARK.Motion.exploreRandomlyLoc(Motion.java:298)
+[B: #12711@156] 	at SPAARK.Mopper.exploreMoveScores(Mopper.java:936)
+[B: #12711@156] 	at SPAARK.Mopper.run(Mopper.java:88)
+[B: #12711@156] 	at SPAARK.Robot.run(Robot.java:81)
+[B: #12711@156] 	at SPAARK.RobotPlayer.run(RobotPlayer.java:78)
+[B: #12711@156] 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+[B: #12711@156] 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+[B: #12711@156] 	at battlecode.instrumenter.SandboxedRobotPlayer.loadAndRunPlayer(SandboxedRobotPlayer.java:275)
+[B: #12711@156] 	at battlecode.instrumenter.SandboxedRobotPlayer.lambda$new$2(SandboxedRobotPlayer.java:184)
+[B: #12711@156] 	at java.base/java.lang.Thread.run(Thread.java:1583)
+[B: #12711@157] Unexpected Exception
+[B: #12711@157] java.lang.ArithmeticException: / by zero
+[B: #12711@157] 	at SPAARK.Motion.exploreRandomlyLoc(Motion.java:298)
+[B: #12711@157] 	at SPAARK.Mopper.exploreMoveScores(Mopper.java:936)
+[B: #12711@157] 	at SPAARK.Mopper.run(Mopper.java:88)
+[B: #12711@157] 	at SPAARK.Robot.run(Robot.java:81)
+[B: #12711@157] 	at SPAARK.RobotPlayer.run(RobotPlayer.java:78)
+[B: #12711@157] 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+[B: #12711@157] 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+[B: #12711@157] 	at battlecode.instrumenter.SandboxedRobotPlayer.loadAndRunPlayer(SandboxedRobotPlayer.java:275)
+[B: #12711@157] 	at battlecode.instrumenter.SandboxedRobotPlayer.lambda$new$2(SandboxedRobotPlayer.java:184)
+[B: #12711@157] 	at java.base/java.lang.Thread.run(Thread.java:1583)
+[B: #12711@158] Unexpected Exception
+[B: #12711@158] java.lang.ArithmeticException: / by zero
+[B: #12711@158] 	at SPAARK.Motion.exploreRandomlyLoc(Motion.java:298)
+[B: #12711@158] 	at SPAARK.Mopper.exploreMoveScores(Mopper.java:936)
+[B: #12711@158] 	at SPAARK.Mopper.run(Mopper.java:88)
+[B: #12711@158] 	at SPAARK.Robot.run(Robot.java:81)
+[B: #12711@158] 	at SPAARK.RobotPlayer.run(RobotPlayer.java:78)
+[B: #12711@158] 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+[B: #12711@158] 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+[B: #12711@158] 	at battlecode.instrumenter.SandboxedRobotPlayer.loadAndRunPlayer(SandboxedRobotPlayer.java:275)
+[B: #12711@158] 	at battlecode.instrumenter.SandboxedRobotPlayer.lambda$new$2(SandboxedRobotPlayer.java:184)
+[B: #12711@158] 	at java.base/java.lang.Thread.run(Thread.java:1583)
+[server]                     SPAARK (B) wins (round 158)
+[server] Reason: The winning team destroyed all of the enemy team's units.
+[server] -------------------- Match Finished --------------------
+
+BUILD SUCCESSFUL in 3s
+7 actionable tasks: 2 executed, 5 up-to-date
