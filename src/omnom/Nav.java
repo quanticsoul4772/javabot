@@ -144,6 +144,45 @@ public class Nav {
     }
 
     /**
+     * Distance utilities (SPAARK Motion.java).
+     */
+    public static int getManhattanDistance(MapLocation a, MapLocation b) {
+        return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+    }
+
+    public static int getChebyshevDistance(MapLocation a, MapLocation b) {
+        return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+    }
+
+    public static MapLocation getClosest(MapLocation[] locs) throws GameActionException {
+        if (locs.length == 0) return null;
+        MapLocation closest = locs[0];
+        int distance = G.me.distanceSquaredTo(locs[0]);
+        for (int i = locs.length; --i > 0;) {
+            int dist = G.me.distanceSquaredTo(locs[i]);
+            if (dist < distance) {
+                closest = locs[i];
+                distance = dist;
+            }
+        }
+        return closest;
+    }
+
+    public static MapLocation getFarthest(MapLocation[] locs) throws GameActionException {
+        if (locs.length == 0) return null;
+        MapLocation farthest = locs[0];
+        int distance = G.me.distanceSquaredTo(locs[0]);
+        for (int i = locs.length; --i > 0;) {
+            int dist = G.me.distanceSquaredTo(locs[i]);
+            if (dist > distance) {
+                farthest = locs[i];
+                distance = dist;
+            }
+        }
+        return farthest;
+    }
+
+    /**
      * Bug2 with mode support (TOWARDS/AWAY/AROUND).
      * Source: bot_spec.md Part 14.18
      */
@@ -301,6 +340,138 @@ public class Nav {
             moveTo(target);
         } else {
             moveTo(G.mapCenter);
+        }
+    }
+
+    /**
+     * Aggressive exploration - prioritize enemy towers (SPAARK Motion.java line 341+).
+     */
+    public static MapLocation exploreRandomlyAggressiveLoc() throws GameActionException {
+        if (G.rc.isMovementReady()) {
+            --exploreTime;
+
+            if (exploreLoc != null) {
+                if (G.rc.canSenseLocation(exploreLoc)) {
+                    exploreLoc = null;
+                } else if (exploreTime == 0) {
+                    exploreLoc = null;
+                } else if (Random.rand() % 35 == 0) {
+                    exploreLoc = null;
+                }
+            }
+
+            if (exploreLoc == null) {
+                // Try symmetry prediction
+                MapLocation predicted = POI.predictEnemyTower();
+                if (predicted != null) {
+                    exploreLoc = predicted;
+                    exploreTime = getChebyshevDistance(G.me, exploreLoc) + 20;
+                }
+            }
+
+            // Fallback: unexplored tile weighted random selection
+            if (exploreLoc == null) {
+                int sum = G.mapArea;
+                for (int i = G.mapHeight; --i >= 0;) {
+                    sum -= Long.bitCount(POI.explored[i]);
+                }
+
+                int rand = Random.rand() % Math.max(1, sum);
+                int cur = 0;
+                for (int i = G.mapHeight; --i >= 0;) {
+                    cur += G.mapWidth - Long.bitCount(POI.explored[i]);
+                    if (cur > rand) {
+                        rand -= cur - (G.mapWidth - Long.bitCount(POI.explored[i]));
+                        int cur2 = 0;
+                        for (int b = G.mapWidth; --b >= 0;) {
+                            if (((POI.explored[i] >> b) & 1) == 0) {
+                                if (++cur2 > rand) {
+                                    exploreLoc = new MapLocation(b, i);
+                                    exploreTime = getChebyshevDistance(G.me, exploreLoc) + 20;
+                                    break;
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (exploreLoc == null) {
+                exploreLoc = new MapLocation(Random.rand() % G.mapWidth, Random.rand() % G.mapHeight);
+            }
+        }
+        return exploreLoc;
+    }
+
+    /**
+     * Corner exploration strategy (SPAARK Motion.java line 193+).
+     */
+    public static MapLocation exploreCorners() throws GameActionException {
+        MapLocation best = null;
+        int bestDist = 1000000;
+
+        // Check all 4 corners
+        int dist = G.me.distanceSquaredTo(new MapLocation(0, 0));
+        if (dist > 25 && dist < bestDist && (((POI.explored[0] >> 0) & 1) == 0)) {
+            bestDist = dist;
+            best = new MapLocation(0, 0);
+        }
+
+        dist = G.me.distanceSquaredTo(new MapLocation(0, G.mapHeight - 1));
+        if (dist > 25 && dist < bestDist && (((POI.explored[G.mapHeight - 1] >> 0) & 1) == 0)) {
+            bestDist = dist;
+            best = new MapLocation(0, G.mapHeight - 1);
+        }
+
+        dist = G.me.distanceSquaredTo(new MapLocation(G.mapWidth - 1, 0));
+        if (dist > 25 && dist < bestDist && (((POI.explored[0] >> (G.mapWidth - 1)) & 1) == 0)) {
+            bestDist = dist;
+            best = new MapLocation(G.mapWidth - 1, 0);
+        }
+
+        dist = G.me.distanceSquaredTo(new MapLocation(G.mapWidth - 1, G.mapHeight - 1));
+        if (dist > 25 && dist < bestDist && (((POI.explored[G.mapHeight - 1] >> (G.mapWidth - 1)) & 1) == 0)) {
+            bestDist = dist;
+            best = new MapLocation(G.mapWidth - 1, G.mapHeight - 1);
+        }
+
+        if (best != null) {
+            exploreLoc = best;
+        }
+        return exploreLoc;
+    }
+
+    // Retreat paint tracking
+    private static int lastPaint = 0;
+    private static int paintLost = 0;
+    private static final int RETREAT_PAINT_OFFSET = 30;
+    private static final double RETREAT_PAINT_RATIO = 0.25;
+
+    /**
+     * Dynamic retreat paint threshold (SPAARK Motion.java line 451+).
+     */
+    public static int getRetreatPaint() throws GameActionException {
+        RobotInfo[] allies = G.getAllies();
+        if (allies.length > 10) {
+            return 0;  // No retreat if we have many units
+        }
+
+        int paint = Math.max(paintLost + RETREAT_PAINT_OFFSET,
+                (int) ((double) G.type.paintCapacity * RETREAT_PAINT_RATIO));
+
+        switch (G.type) {
+            case SOLDIER:
+                return paint;
+            case SPLASHER:
+                if (G.mapArea > 1600 && G.rc.getNumberTowers() <= 4) {
+                    return 50;
+                }
+                return paint;
+            case MOPPER:
+                return paint;
+            default:
+                return 0;
         }
     }
 
