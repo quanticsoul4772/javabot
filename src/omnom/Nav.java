@@ -642,4 +642,66 @@ public class Nav {
         retreatTower = retreatLoc != null ? 0 : -1;
         retreatWaitingLoc = null;
     }
+
+    /**
+     * Execute retreat movement (SPAARK Motion.java line 739+).
+     */
+    public static void retreat() throws GameActionException {
+        Direction dir = retreatDir(retreatLoc);
+        int[] scores = Micro.scoreAllDirections(dir);
+        microMove(scores);
+    }
+
+    /**
+     * Safer move wrapper (SPAARK Motion.java).
+     */
+    public static boolean move(Direction dir) throws GameActionException {
+        if (G.rc.canMove(dir)) {
+            G.rc.move(dir);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Safer canMove wrapper (SPAARK Motion.java).
+     */
+    public static boolean canMove(Direction dir) throws GameActionException {
+        if (dir == Direction.CENTER) return false;
+        return G.rc.canMove(dir);
+    }
+
+    /**
+     * Spread movement - disperse from allies (SPAARK Motion.java line 119+).
+     * Simplified version without bug2Helper dependency.
+     */
+    public static void spreadRandomly() throws GameActionException {
+        if (!G.rc.isMovementReady()) return;
+
+        // Calculate vector away from allies
+        MapLocation target = G.me;
+        RobotInfo[] allies = G.getAllies();
+        for (int i = allies.length; --i >= 0;) {
+            if (allies[i].type.isRobotType()) {
+                target = target.subtract(G.me.directionTo(allies[i].location));
+            }
+        }
+
+        // Also avoid obstacles
+        for (int i = 8; --i >= 0;) {
+            if (!G.rc.canMove(G.DIRECTIONS[i])) {
+                target = target.subtract(G.DIRECTIONS[i]);
+            }
+        }
+
+        // If no allies nearby, move randomly
+        if (target.equals(G.me)) {
+            moveRandom();
+        } else {
+            // Move toward target using micro
+            Direction dir = G.me.directionTo(target);
+            int[] scores = Micro.scoreAllDirections(dir);
+            microMove(scores);
+        }
+    }
 }
