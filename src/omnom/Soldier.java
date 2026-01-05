@@ -269,11 +269,8 @@ public class Soldier {
             }
         }
 
-        // Move toward center (pheromone disabled - match ends before round 150)
-        Nav.moveTo(G.mapCenter);
-
-        // Mark current location as explored
-        POI.markExplored(G.me);
+        // SMART EXPLORATION: Use SPAARK's target selection
+        Nav.exploreWithTarget();
 
         // Paint current tile
         if (G.rc.canAttack(G.me)) {
