@@ -204,7 +204,8 @@ def clientType = project.findProperty("compatibilityClient").toBoolean()
                     : "tauri"
 
 dependencies {
-  testImplementation group: 'junit', name: 'junit', version: '4.13.2'
+  // JUnit 5 for unit tests
+  testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
 
   // The Battlecode engine.
   implementation group: 'org.battlecode', name: 'battlecode25-java', version: versions.battlecodeEngine
@@ -215,6 +216,15 @@ dependencies {
   // Scala
   implementation group: 'org.scala-lang', name: 'scala-library', version: '2.11.7'
   testImplementation group: 'org.scalatest', name: 'scalatest_2.11', version: '3.0.0'
+}
+
+// Configure test task for JUnit 5
+test {
+  useJUnitPlatform()
+  testLogging {
+    events "passed", "skipped", "failed"
+    showStandardStreams = true
+  }
 }
 
 

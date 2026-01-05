@@ -182,10 +182,10 @@ public static boolean isEconomicallyStrong() {
 
 ```bash
 # Run 10 matches with indicators
-./gradlew run -PteamA=mybot -PteamB=examplefuncsplayer -Pmaps=DefaultSmall 2>&1 | grep -E "P5.5|RUIN|denied"
+./gradlew run -PteamA=mybot -PteamB=spaark2 -Pmaps=DefaultSmall 2>&1 | grep -E "P5.5|RUIN|denied"
 
 # Compare win rates before/after each improvement
-# Baseline: Current bot vs examplefuncsplayer
+# Baseline: Current bot vs spaark2
 # Test: Each improvement individually
 ```
 

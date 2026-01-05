@@ -40,6 +40,8 @@ Each bot is a separate package in `src/`. See each bot's README for details.
 
 | Package | Description |
 |---------|-------------|
+| `omnom` | Full SPAARK + research innovations (198 rounds, TDD built) |
+| `spaark3` | SPAARK iteration test (196 rounds, autonomous iteration) |
 | `spaark2` | SPAARK-inspired with POI, Micro, debt-based spawning |
 | `mybot` | Legacy bot with priority chain pattern |
 

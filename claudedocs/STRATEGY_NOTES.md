@@ -84,7 +84,7 @@ Compiled insights from past competitions and winning teams.
 4. **Week 4:** Polish and adapt
 
 ### Testing Approach
-- Run matches against `examplefuncsplayer`
+- Run matches against `spaark2` or `SPAARK`
 - Test on multiple map types
 - Simulate edge cases
 - Scrimmage early and often
