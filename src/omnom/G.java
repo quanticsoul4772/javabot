@@ -55,7 +55,7 @@ public class G {
         -2, 2, -4, 4, -4, 4, -2, 2
     };
 
-    // Retreat thresholds (baseline)
+    // Retreat thresholds (from spec Part 7.2)
     public static final int RETREAT_PAINT = 50;
     public static final int RETREAT_CHIPS = 6000;
     public static final int RETREAT_ALLY_THRESHOLD = 9;

@@ -196,7 +196,26 @@ public class Soldier {
             }
         }
 
-        // BUILD_TOWER disabled - focus on rally concentration test
+        // BUILD 3RD TOWER: Aggressive early building for more spawn capacity
+        if (mode == Mode.EXPLORE && G.round >= 25 && G.round <= 50 && G.rc.getNumberTowers() <= 2) {
+            MapLocation ruin = POI.findNearestNeutralRuin();
+            if (ruin != null && G.me.distanceSquaredTo(ruin) <= 25 && !G.recentlyVisited(ruin, 300)) {
+                mode = Mode.BUILD_TOWER;
+                buildTarget = ruin;
+                buildTimeout = 0;
+                return;
+            }
+        }
+
+        // Exit BUILD_TOWER only on timeout (commit to building)
+        if (mode == Mode.BUILD_TOWER) {
+            buildTimeout++;
+            if (buildTimeout > 60 || buildTarget == null) {
+                mode = Mode.EXPLORE;
+                buildTarget = null;
+                buildTimeout = 0;
+            }
+        }
 
         // COUNTER-STRATEGY: Priority target enemy paint towers (from spec Part 17.3)
         RobotInfo[] enemies = G.getEnemies();
@@ -241,9 +260,6 @@ public class Soldier {
     }
 
     private static void explore() throws GameActionException {
-        // EXTREME CONCENTRATION: All units converge on [15,15]
-        MapLocation rally = new MapLocation(15, 15);
-
         // Attack enemies in range
         RobotInfo[] enemies = G.getEnemies();
         for (int i = enemies.length; --i >= 0;) {
@@ -253,8 +269,11 @@ public class Soldier {
             }
         }
 
-        // All move to same rally point
-        Nav.moveTo(rally);
+        // Move toward center (pheromone disabled - match ends before round 150)
+        Nav.moveTo(G.mapCenter);
+
+        // Mark current location as explored
+        POI.markExplored(G.me);
 
         // Paint current tile
         if (G.rc.canAttack(G.me)) {
