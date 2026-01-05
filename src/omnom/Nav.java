@@ -341,4 +341,28 @@ public class Nav {
 
         return Direction.CENTER;
     }
+
+    /**
+     * Navigate toward target using bug2 + micro (SPAARK Motion.java).
+     */
+    public static void bugnavTowards(MapLocation dest) throws GameActionException {
+        Direction dir = bug2(dest);
+        int[] scores = Micro.scoreAllDirections(dir);
+        int bestIdx = G.maxIndex(scores);
+        Direction best = G.ALL_DIRECTIONS[bestIdx];
+
+        if (best != Direction.CENTER && G.rc.canMove(best)) {
+            G.rc.move(best);
+        }
+    }
+
+    /**
+     * Navigate away from target.
+     */
+    public static void bugnavAway(MapLocation dest) throws GameActionException {
+        Direction dir = bug2(dest).opposite();
+        if (G.rc.canMove(dir)) {
+            G.rc.move(dir);
+        }
+    }
 }
