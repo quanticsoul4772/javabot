@@ -365,4 +365,42 @@ public class Nav {
             G.rc.move(dir);
         }
     }
+
+    /**
+     * Move using micro scores (SPAARK Motion.java).
+     */
+    public static void microMove(int[] scores) throws GameActionException {
+        if (!G.rc.isMovementReady()) return;
+
+        int bestIdx = G.maxIndex(scores);
+        Direction best = G.ALL_DIRECTIONS[bestIdx];
+
+        if (scores[bestIdx] > Integer.MIN_VALUE && best != Direction.CENTER) {
+            if (G.rc.canMove(best)) {
+                G.rc.move(best);
+            }
+        }
+    }
+
+    /**
+     * Paint transfer (SPAARK Motion.java line 747+).
+     */
+    public static void tryTransferPaint() throws GameActionException {
+        MapLocation[] ruins = G.rc.senseNearbyRuins(-1);
+        if (ruins == null) return;
+
+        for (int i = ruins.length; --i >= 0;) {
+            if (G.rc.canSenseRobotAtLocation(ruins[i])) {
+                RobotInfo tower = G.rc.senseRobotAtLocation(ruins[i]);
+                if (tower.type.isTowerType()) {
+                    // Take paint from tower (negative = take)
+                    int amt = -Math.min(G.rc.getType().paintCapacity - G.rc.getPaint(), tower.paintAmount);
+
+                    if (amt != 0 && G.rc.canTransferPaint(ruins[i], amt)) {
+                        G.rc.transferPaint(ruins[i], amt);
+                    }
+                }
+            }
+        }
+    }
 }
