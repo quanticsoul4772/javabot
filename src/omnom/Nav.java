@@ -303,4 +303,42 @@ public class Nav {
             moveTo(G.mapCenter);
         }
     }
+
+    /**
+     * Sophisticated retreat direction (SPAARK Motion.java line 685+).
+     */
+    public static Direction retreatDir(MapLocation retreatLoc) throws GameActionException {
+        if (!G.rc.isMovementReady()) {
+            return Direction.CENTER;
+        }
+
+        int dist = G.me.distanceSquaredTo(retreatLoc);
+
+        // Within range of tower (dist <= 8)
+        if (dist <= 8) {
+            // Check if we're lowest paint in queue
+            RobotInfo[] allies = G.getAllies();
+            boolean lowest = true;
+
+            for (int i = allies.length; --i >= 0;) {
+                int allyDist = allies[i].location.distanceSquaredTo(retreatLoc);
+                if (allyDist <= 8 && allies[i].paintAmount < G.paint) {
+                    lowest = false;
+                    break;
+                }
+            }
+
+            // If lowest paint, approach tower
+            if (lowest) {
+                return bug2(retreatLoc);
+            }
+        }
+
+        // Not at tower or not lowest - move toward but stop at distance
+        if (dist > 8) {
+            return bug2(retreatLoc);
+        }
+
+        return Direction.CENTER;
+    }
 }
