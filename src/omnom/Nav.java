@@ -248,4 +248,59 @@ public class Nav {
 
         return false;
     }
+
+    // Exploration state (from SPAARK)
+    private static MapLocation exploreLoc = null;
+    private static int exploreTime = 0;
+
+    /**
+     * Smart exploration target selection (SPAARK Motion.java).
+     */
+    public static MapLocation exploreRandomlyLoc() throws GameActionException {
+        if (G.rc.isMovementReady()) {
+            --exploreTime;
+
+            if (exploreLoc != null) {
+                // Reset if reached
+                if (G.rc.canSenseLocation(exploreLoc)) {
+                    exploreLoc = null;
+                }
+                // Timeout
+                else if (exploreTime == 0) {
+                    exploreLoc = null;
+                }
+                // 3% random reset
+                else if (Random.rand() % 35 == 0) {
+                    exploreLoc = null;
+                }
+            }
+
+            if (exploreLoc == null) {
+                // Try symmetry prediction
+                MapLocation predicted = POI.predictEnemyTower();
+                if (predicted != null) {
+                    exploreLoc = predicted;
+                } else {
+                    // Random map location
+                    int x = Random.nextInt(G.mapWidth);
+                    int y = Random.nextInt(G.mapHeight);
+                    exploreLoc = new MapLocation(x, y);
+                }
+                exploreTime = G.me.distanceSquaredTo(exploreLoc) + 20;
+            }
+        }
+        return exploreLoc;
+    }
+
+    /**
+     * Explore with smart targeting.
+     */
+    public static void exploreWithTarget() throws GameActionException {
+        MapLocation target = exploreRandomlyLoc();
+        if (target != null) {
+            moveTo(target);
+        } else {
+            moveTo(G.mapCenter);
+        }
+    }
 }
