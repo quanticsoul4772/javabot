@@ -269,12 +269,14 @@ public class Soldier {
             }
         }
 
-        // SMART EXPLORATION: Use SPAARK's target selection
-        Nav.exploreWithTarget();
-
-        // Paint current tile
-        if (G.rc.canAttack(G.me)) {
-            G.rc.attack(G.me);
+        // SMART EXPLORATION with paint-while-moving
+        MapLocation target = Nav.exploreRandomlyLoc();
+        if (target != null) {
+            // Move with micro that paints empty tiles
+            int[] scores = Micro.moveWithPaintMicro(G.me.directionTo(target));
+            Nav.microMove(scores);
+        } else {
+            Nav.moveTo(G.mapCenter);
         }
     }
 
