@@ -84,4 +84,34 @@ public class Micro {
 
         return nearest;
     }
+
+    /**
+     * Paint while moving micro (SPAARK).
+     */
+    public static int[] moveWithPaintMicro(Direction targetDir) throws GameActionException {
+        int[] scores = scoreAllDirections(targetDir);
+
+        // 25% chance: paint empty tile while moving
+        if (Random.rand() % 4 == 0) {
+            int turnsToNext = (G.cooldown(G.paint, GameConstants.MOVEMENT_COOLDOWN, G.type.paintCapacity) + 0) / 10;
+
+            for (int i = 0; i < 9; i++) {
+                MapLocation nxt = G.me.add(G.ALL_DIRECTIONS[i]);
+
+                if (G.rc.onTheMap(nxt) && G.rc.canSenseLocation(nxt)) {
+                    MapInfo info = G.rc.senseMapInfo(nxt);
+                    if (info.getPaint() == PaintType.EMPTY && G.rc.canAttack(nxt)) {
+                        // Neutralize empty tile penalty
+                        scores[i] += 5 * GameConstants.PENALTY_NEUTRAL_TERRITORY * turnsToNext;
+
+                        // Paint it
+                        G.rc.attack(nxt);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return scores;
+    }
 }
